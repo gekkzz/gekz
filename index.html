@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rubric reviewer</title>
+<style>
+:root{--bg:#1b1d1f;--panel:#202326;--line:#2c2f33;--fg:#f1f2f3;--mut:#9aa0a6;--pass:#2f6b1f;--fail:#7a0f10;--btn:#2a2d31}
+@media (prefers-color-scheme:light){:root{--bg:#fafafa;--panel:#fff;--line:#dfe1e4;--fg:#1c1e21;--mut:#5f6368;--btn:#eceef0}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.35 system-ui,-apple-system,"Segoe UI",sans-serif}
+header{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:12px 16px;align-items:center;padding:16px 24px;border-bottom:1px solid var(--line)}
+h1{margin:0;font-size:18px;font-weight:600}
+.bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:flex-end}
+.btn.newtask{border-color:#c0392b}
+.btn.newtask:hover{border-color:#e5534b;color:#e5534b}
+@media (max-width:1100px){header{grid-template-columns:minmax(0,1fr);justify-items:start}.bar{justify-content:flex-start}}
+.meta{color:var(--mut);font-size:13px}
+.btn{all:unset;cursor:pointer;padding:8px 14px;border:1px solid var(--line);border-radius:8px;background:var(--btn);font-weight:600;font-size:14px}
+.btn:hover{border-color:var(--mut)}
+.btn.o-green,.btn.o-blue,.btn.o-yellow{border-width:2px;padding:7px 13px}
+.btn.o-green,.btn.o-green:hover{border-color:#2ea043}
+.btn.o-blue,.btn.o-blue:hover{border-color:#388bfd}
+.btn.o-yellow,.btn.o-yellow:hover{border-color:#d4a72c}
+.btn.o-green:hover,.btn.o-blue:hover,.btn.o-yellow:hover{filter:brightness(1.15)}
+.btn:focus-visible,.ev button:focus-visible{outline:2px solid var(--fg);outline-offset:2px}
+.btn[disabled]{opacity:.4;cursor:not-allowed}
+.msg{margin:12px 24px;padding:10px 14px;border:1px solid var(--line);border-radius:8px;background:var(--panel);font-size:14px}
+.wrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;min-width:1000px}
+th{position:sticky;top:0;background:var(--bg);text-align:left;font-weight:400;color:var(--mut);font-size:13px;padding:14px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+td{padding:14px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+td.id{width:72px}
+td.crit{min-width:340px;max-width:480px}
+td.w{width:100px}
+.dash{color:var(--mut)}
+td.act{width:84px;padding-top:12px}
+.del{all:unset;cursor:pointer;padding:4px 9px;border:2px solid #d33a2c;border-radius:6px;font-size:13px;color:var(--mut)}
+.del:hover{color:#e5534b;filter:brightness(1.15)}
+.del:focus-visible{outline:2px solid var(--fg);outline-offset:2px}
+td{padding:8px 6px}
+textarea{display:block;width:100%;margin:0;padding:6px;border:1px solid transparent;border-radius:6px;background:transparent;color:inherit;font:inherit;line-height:1.35;resize:none;overflow:hidden}
+textarea::placeholder{color:var(--mut)}
+textarea:hover:not(:disabled){border-color:var(--line)}
+textarea:focus{outline:none;border-color:var(--mut);background:var(--panel)}
+textarea.chg{box-shadow:inset 3px 0 0 #d9a21b}
+td.id textarea{color:var(--mut)}
+.score{color:var(--fg);font-weight:600;font-size:15px;margin-top:2px}
+.scsub{font-size:12px;font-weight:400;color:var(--mut)}
+.ev{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.ev button{all:unset;cursor:pointer;padding:6px 12px;color:var(--mut);font-weight:600}
+.ev button.on.p{background:var(--pass);color:#fff}
+.ev button.on.f{background:var(--fail);color:#fff}
+.empty{padding:64px 24px;text-align:center;color:var(--mut)}
+
+.tabs{display:flex;gap:4px;flex-wrap:wrap}
+.tab{all:unset;cursor:pointer;padding:8px 14px;border-radius:8px;font-weight:600;font-size:15px;color:var(--mut)}
+.tab:hover{color:var(--fg)}
+.tab.on{color:var(--fg);background:var(--btn)}
+.tab:focus-visible,.subbtn:focus-visible,.ctl button:focus-visible{outline:2px solid var(--fg);outline-offset:2px}
+.subtabs{display:flex;gap:8px;flex-wrap:wrap;padding:12px 24px;border-bottom:1px solid var(--line)}
+.sub{display:inline-flex;align-items:center;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.sub.on{background:var(--btn);border-color:var(--mut)}
+.subbtn{all:unset;cursor:pointer;padding:6px 12px;font-size:14px;color:var(--mut)}
+.sub.on .subbtn,.subbtn:hover{color:var(--fg)}
+.stage{min-width:0}
+.vname{padding-bottom:10px;color:var(--mut);font-size:13px}
+.player{background:#000;border-radius:10px;overflow:hidden;border:1px solid var(--line)}
+.player video{display:block;width:100%;max-height:68vh;background:#000;cursor:pointer}
+.perr{padding:14px;background:var(--panel);color:#e5534b;font-size:14px}
+.ctl{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:10px 12px;background:var(--panel);color:var(--fg)}
+.ctl button{all:unset;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:8px}
+.ctl button:hover{background:var(--btn)}
+.ctl svg{width:20px;height:20px;fill:currentColor}
+.ctl .ts{width:auto;padding:0 10px;border:1px solid var(--line);font:600 14px/1 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-variant-numeric:tabular-nums}
+.dur{color:var(--mut);font:13px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+.tip{color:var(--mut);font-size:12px;min-width:56px}
+.seek{flex:1;min-width:120px}
+.vol{width:90px}
+input[type=range]{accent-color:#8ab4f8}
+.seektip{position:fixed;z-index:50;pointer-events:none;transform:translate(-50%,-100%);background:#000;color:#fff;border:1px solid #444;padding:3px 8px;border-radius:6px;font:600 12px/1.3 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-variant-numeric:tabular-nums}
+
+.split{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(340px,1fr);gap:20px;padding:20px 24px;align-items:start}
+.side{position:sticky;top:12px;max-height:calc(100vh - 24px);overflow:auto;border:1px solid var(--line);border-radius:10px;background:var(--panel)}
+@media (max-width:960px){.split{grid-template-columns:1fr}.side{position:static;max-height:none}}
+.rhead{display:none;position:sticky;top:0;z-index:1;background:var(--panel);padding:12px 14px;border-bottom:1px solid var(--line);justify-content:space-between;align-items:baseline;gap:10px;font-size:14px}
+.rhead b{font-size:15px}
+td::before{display:none}
+.compact .rhead{display:flex}
+.compact thead{display:none}
+.compact table,.compact tbody{display:block;min-width:0;width:auto}
+.compact tr{display:grid;grid-template-columns:64px 76px minmax(0,1fr) minmax(0,1fr);grid-template-areas:"id w ts ts" "crit crit crit crit" "a1 a1 a2 a2" "ev ev act act";gap:2px 6px;padding:12px 10px;border-bottom:1px solid var(--line)}
+.compact td{display:block;min-width:0;max-width:none;width:auto;border:0;padding:0}
+.compact td::before{display:block;content:attr(data-label);font-size:11px;color:var(--mut);padding:0 6px 1px}
+.compact td.id{grid-area:id}.compact td.w{grid-area:w}.compact td.c-ts{grid-area:ts}
+.compact td.crit{grid-area:crit}.compact td.c-a1{grid-area:a1}.compact td.c-a2{grid-area:a2}
+.compact td.c-ev{grid-area:ev;padding-top:6px}.compact td.c-ev::before,.compact td.act::before{display:none}
+.compact td.act{grid-area:act;text-align:right;padding-top:6px}
+.compact .empty{padding:32px 16px}
+#empty{max-width:560px;margin:0 auto;line-height:1.5}
+
+.vform{display:flex;flex-wrap:wrap;gap:10px 12px;align-items:center}
+.vlab{display:inline-flex;align-items:center;gap:8px;font-weight:600;font-size:14px}
+.vlab input{width:96px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--fg);font:inherit}
+.vlab input:focus{outline:none;border-color:var(--mut)}
+.vopts{display:flex;flex-wrap:wrap;gap:8px}
+.opt{all:unset;cursor:pointer;padding:8px 12px;border:1px solid var(--line);border-radius:8px;font-size:14px;line-height:1.3;color:var(--mut);max-width:260px}
+.opt:hover{border-color:var(--mut);color:var(--fg)}
+.opt.on{background:var(--btn);border-color:var(--fg);color:var(--fg)}
+.opt.on::before{content:"\2713\00a0"}
+.opt:focus-visible{outline:2px solid var(--fg);outline-offset:2px}
+.vmsg{min-height:20px;margin:8px 0 0;font-size:13px;color:#e5534b}
+.nhead{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:10px 0 8px;font-weight:600;font-size:14px}
+.nact{display:inline-flex;align-items:center;gap:10px}
+.notes{height:calc(100vh - 250px);min-height:260px;overflow:auto;resize:vertical;border-color:var(--line);background:var(--panel);padding:12px;line-height:1.5}
+.notes.solo{height:calc(100vh - 180px)}
+.nhead.top{margin-top:0}
+.notes.nohead{height:calc(100vh - 130px)}
+</style>
+</head>
+<body>
+<header>
+  <nav class="tabs" role="tablist" aria-label="Sections">
+    <button class="tab on" role="tab" aria-selected="true" data-tab="rubric">Rubric</button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="prompt">Prompt</button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="src" id="srcTab">Source Clips</button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="final">Final Edit</button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="verd">Verdict Disagreements</button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="good">Notes - Good</button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="bad">Notes - Bad</button>
+  </nav>
+  <button class="btn newtask" id="newTask">New Task</button>
+  <div class="bar">
+    <span id="file" class="meta">No file loaded</span>
+    <label class="btn o-green" tabindex="0">Upload CSV<input id="up" type="file" accept=".csv,text/csv" hidden></label>
+    <label class="btn o-green" tabindex="0">Upload Source Clips<input id="upSrc" type="file" accept="video/*" multiple hidden></label>
+    <label class="btn o-green" tabindex="0">Upload Final Edit<input id="upFin" type="file" accept="video/*" hidden></label>
+    <button class="btn o-blue" id="dl" disabled>Download CSV</button>
+    <button class="btn o-yellow" id="add">Add Row</button>
+  </div>
+</header>
+<div id="msg" class="msg" hidden></div>
+<section id="p-rubric">
+<div id="rubricBox">
+<div class="rhead"><span>Rubric</span><span>Response 1 evaluation <b class="scoreV">&mdash;</b> <span class="scsub subV"></span></span></div>
+<div class="wrap">
+  <table id="tbl" hidden>
+    <thead><tr>
+      <th>ID</th><th>Attempt 1<br>timestamp</th><th>Attempt 2<br>timestamp</th>
+      <th>Proposed final criterion</th><th>Proposed<br>final weight</th><th>Proposed final timestamp</th>
+      <th>Response 1 evaluation<div class="score scoreV">&mdash;</div><div class="scsub subV"></div></th><th></th>
+    </tr></thead>
+    <tbody id="body"></tbody>
+  </table>
+  <div class="empty" id="empty">Upload your task's Final Rubric CSV, Source Clips, and Final Edit with the buttons in the top right. Also helpful to copy paste the task's prompt into the prompt tab in the top left to verify rows.</div>
+</div>
+</div>
+</section>
+
+<section id="p-prompt" hidden>
+  <div class="split">
+    <div class="stage"><textarea id="notesPrompt" class="notes solo nohead" spellcheck="false" aria-label="Prompt" placeholder="Copy paste the task's prompt here to easily compare"></textarea></div>
+    <div class="side" id="slotPrompt"></div>
+  </div>
+</section>
+
+<section id="p-src" hidden>
+  <div class="subtabs" id="clipTabs" role="tablist" aria-label="Source clips"></div>
+  <div class="split">
+    <div class="stage"><div id="clipStage"></div>
+    <div class="empty" id="srcEmpty">Upload source clips to watch them here. Each clip gets its own tab.</div></div>
+    <div class="side" id="slotSrc"></div>
+  </div>
+</section>
+
+<section id="p-final" hidden>
+  <div class="split">
+    <div class="stage"><div id="finalStage"></div>
+    <div class="empty" id="finEmpty">Upload the final edit to watch it here.</div></div>
+    <div class="side" id="slotFinal"></div>
+  </div>
+</section>
+
+<section id="p-verd" hidden>
+  <div class="split">
+    <div class="stage">
+      <div class="vform">
+        <label class="vlab">Criterion # <input id="vc" type="text" autocomplete="off" aria-label="Criterion number"></label>
+        <div class="vopts" id="vopts" role="group" aria-label="Verdict type">
+          <button type="button" class="opt" aria-pressed="false" data-v="Judge verdict was a pass, should have been a fail. ">Judge verdict was a pass, should have been a fail.</button>
+          <button type="button" class="opt" aria-pressed="false" data-v="Judge verdict was a fail, should have been a pass. ">Judge verdict was a fail, should have been a pass.</button>
+        </div>
+        <button class="btn" id="vadd">Add</button>
+      </div>
+      <div class="vmsg" id="vmsg" role="status"></div>
+      <div class="nhead"><label for="notes">Notepad</label>
+        <span class="nact"><span class="tip" id="ntip" aria-live="polite"></span><button class="btn" id="vcopy">Copy to clipboard</button></span></div>
+      <textarea id="notes" class="notes" spellcheck="false" placeholder="Type notes here, or fill in the fields above and press Add."></textarea>
+    </div>
+    <div class="side" id="slotVerd"></div>
+  </div>
+</section>
+
+<section id="p-good" hidden>
+  <div class="split">
+    <div class="stage">
+      <div class="nhead top"><label for="notesGood">Notes - Good</label>
+        <span class="nact"><span class="tip" id="gtip" aria-live="polite"></span><button class="btn" id="gcopy">Copy to clipboard</button></span></div>
+      <textarea id="notesGood" class="notes solo" spellcheck="false" placeholder="Write what the model did well"></textarea>
+    </div>
+    <div class="side" id="slotGood"></div>
+  </div>
+</section>
+
+<section id="p-bad" hidden>
+  <div class="split">
+    <div class="stage">
+      <div class="nhead top"><label for="notesBad">Notes - Bad</label>
+        <span class="nact"><span class="tip" id="btip" aria-live="polite"></span><button class="btn" id="bcopy">Copy to clipboard</button></span></div>
+      <textarea id="notesBad" class="notes solo" spellcheck="false" placeholder="Write what the model could have done better"></textarea>
+    </div>
+    <div class="side" id="slotBad"></div>
+  </div>
+</section>
+
+<script>
+const COLS = [["id","ID"],["a1","Attempt 1 timestamp"],["a2","Attempt 2 timestamp"],
+              ["crit","Proposed final criterion"],["w","Proposed final weight"],["ts","Proposed final timestamp"]];
+const EVAL = "Response 1 evaluation";
+let head = [], recs = [], ix = {}, evIx = -1, fname = "rubric.csv", dirty = false;
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+
+function parseCSV(text){
+  if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+  const rows = []; let row = [], f = "", q = false;
+  for (let i = 0; i < text.length; i++){
+    const c = text[i];
+    if (q){
+      if (c === '"'){ if (text[i+1] === '"'){ f += '"'; i++; } else q = false; }
+      else f += c;
+    } else if (c === '"') q = true;
+    else if (c === ","){ row.push(f); f = ""; }
+    else if (c === "\n" || c === "\r"){
+      if (c === "\r" && text[i+1] === "\n") i++;
+      row.push(f); rows.push(row); row = []; f = "";
+    } else f += c;
+  }
+  if (f !== "" || row.length){ row.push(f); rows.push(row); }
+  return rows;
+}
+
+let meta = { bom: false, eol: "\n", trail: true, all: false };   /* mirrors the uploaded file */
+function toCSV(rows){
+  const q = s => (meta.all || /[",\r\n]/.test(s)) ? '"' + s.replace(/"/g,'""') + '"' : s;
+  return (meta.bom ? "\ufeff" : "") + rows.map(r => r.map(q).join(",")).join(meta.eol) + (meta.trail ? meta.eol : "");
+}
+
+function load(text, name){
+  meta = { bom: text.charCodeAt(0) === 0xFEFF, eol: /\r\n/.test(text) ? "\r\n" : "\n", trail: /\n$/.test(text),
+           all: /^\ufeff?"(?:[^"]|"")*"(?:,"(?:[^"]|"")*")*(?:\r?\n|$)/.test(text) };
+  const rows = parseCSV(text);
+  if (!rows.length){ return note("That file is empty."); }
+  head = rows[0].map(h => h.trim());
+  const low = head.map(h => h.toLowerCase());
+  ix = {}; const missing = [];
+  COLS.forEach(([k, label]) => { ix[k] = low.indexOf(label.toLowerCase()); if (ix[k] < 0) missing.push(label); });
+  evIx = low.indexOf(EVAL.toLowerCase());
+  recs = rows.slice(1).filter(r => r.some(c => c.trim() !== "")).map(r => {
+    const cells = head.map((_, i) => r[i] ?? "");
+    const v = evIx >= 0 ? cells[evIx].trim().toLowerCase() : "";
+    return { cells, orig: cells.slice(), ev: v === "pass" ? "p" : v === "fail" ? "f" : "" };
+  });
+  fname = name; dirty = false;
+  $("file").textContent = name + " (" + recs.length + " rows)";
+  $("dl").disabled = false;
+  $("tbl").hidden = false; $("empty").hidden = true;
+  note(missing.length ? "Columns not found in this file: " + missing.join(", ") + ". Their cells are left blank." : "");
+  draw();
+}
+
+function note(t){ const m = $("msg"); m.textContent = t; m.hidden = !t; }
+const cell = (r, k) => ix[k] >= 0 ? r.cells[ix[k]] : "";
+const fit = a => { a.style.height = "auto"; a.style.height = a.scrollHeight + 2 + "px"; };
+const mark = a => { const i = ix[a.dataset.k]; a.classList.toggle("chg", i >= 0 && a.value !== recs[+a.dataset.n].orig[i]); };
+
+function draw(){
+  $("body").innerHTML = recs.map((r, n) => {
+    const t = k => `<textarea rows="1" spellcheck="false" placeholder="\u2014" data-n="${n}" data-k="${k}"${ix[k] < 0 ? " disabled" : ""}></textarea>`;
+    return `<tr><td class="id" data-label="ID">${t("id")}</td><td class="c-a1" data-label="Attempt 1 timestamp">${t("a1")}</td><td class="c-a2" data-label="Attempt 2 timestamp">${t("a2")}</td>
+      <td class="crit" data-label="Proposed final criterion">${t("crit")}</td><td class="w" data-label="Weight">${t("w")}</td><td class="c-ts" data-label="Final timestamp">${t("ts")}</td>
+      <td class="c-ev"><div class="ev"><button class="p${r.ev==="p"?" on":""}" data-n="${n}" data-v="p">Pass</button><button class="f${r.ev==="f"?" on":""}" data-n="${n}" data-v="f">Fail</button></div></td>
+      <td class="act"><button class="del" data-n="${n}" aria-label="Delete row ${n + 1}">Delete</button></td></tr>`;
+  }).join("");
+  document.querySelectorAll("#body textarea").forEach(a => { a.value = cell(recs[+a.dataset.n], a.dataset.k); fit(a); mark(a); });
+  if (head.length) $("file").textContent = fname + " (" + recs.length + " rows)";
+  score();
+}
+
+function score(){
+  let pass = 0, tot = 0, graded = 0;
+  recs.forEach(r => {
+    if (!r.ev) return;
+    const w = parseFloat(cell(r, "w")) || 0;
+    graded++; tot += w; if (r.ev === "p") pass += w;
+  });
+  const pct = tot ? Math.round(100 * pass / tot) + "%" : "\u2014";
+  document.querySelectorAll(".scoreV").forEach(el => { el.textContent = pct; });
+  document.querySelectorAll(".subV").forEach(el => { el.textContent = graded + " of " + recs.length + " graded"; });
+}
+
+$("body").addEventListener("input", e => {
+  const a = e.target; if (a.tagName !== "TEXTAREA") return;
+  recs[+a.dataset.n].cells[ix[a.dataset.k]] = a.value;
+  fit(a); mark(a); dirty = true;
+  if (a.dataset.k === "w") score();
+});
+window.addEventListener("resize", () => document.querySelectorAll("#body textarea").forEach(fit));
+window.addEventListener("beforeunload", e => { if (dirty || ["notes", "notesGood", "notesBad", "notesPrompt"].some(id => $(id).value.trim())){ e.preventDefault(); e.returnValue = ""; } });
+
+$("body").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  const n = +b.dataset.n;
+  if (b.classList.contains("del")){
+    const id = cell(recs[n], "id").trim();
+    if (!confirm("Delete row " + (id ? "with ID " + id : n + 1) + "?")) return;
+    recs.splice(n, 1); dirty = true; draw(); return;
+  }
+  const r = recs[n]; r.ev = r.ev === b.dataset.v ? "" : b.dataset.v;
+  draw();
+});
+
+$("add").addEventListener("click", () => {
+  if (!head.length){
+    head = COLS.map(c => c[1]); ix = {}; COLS.forEach(([k], i) => ix[k] = i); evIx = -1; fname = "rubric.csv";
+    $("dl").disabled = false; $("tbl").hidden = false; $("empty").hidden = true;
+  }
+  recs.push({ cells: head.map(() => ""), orig: head.map(() => ""), ev: "" });
+  dirty = true; draw();
+  const rows = document.querySelectorAll("#body tr"), last = rows[rows.length - 1];
+  last.scrollIntoView({ block: "center" });
+  const first = last.querySelector("textarea:not(:disabled)"); if (first) first.focus();
+});
+
+$("up").addEventListener("change", e => {
+  const f = e.target.files[0]; if (!f) return;
+  const rd = new FileReader();
+  rd.onload = () => load(rd.result, f.name);
+  rd.readAsText(f);
+  e.target.value = "";
+});
+document.querySelectorAll("label.btn").forEach(l => l.addEventListener("keydown", e => {
+  if (e.key === "Enter" || e.key === " "){ e.preventDefault(); l.querySelector("input").click(); }
+}));
+
+$("dl").addEventListener("click", () => {
+  const out = [head].concat(recs.filter(r => r.cells.some(c => c.trim() !== "")).map(r => r.cells));
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([toCSV(out)], { type: "text/csv;charset=utf-8" }));
+  a.download = fname.replace(/\.csv$/i, "") + "-edited.csv";
+  a.click(); URL.revokeObjectURL(a.href); dirty = false;
+});
+
+/* ---------- tabs ---------- */
+const panes = { rubric: $("p-rubric"), prompt: $("p-prompt"), src: $("p-src"), final: $("p-final"), verd: $("p-verd"), good: $("p-good"), bad: $("p-bad") };
+let curTab = "rubric";
+const rubricBox = $("rubricBox");
+const slots = { rubric: $("p-rubric"), prompt: $("slotPrompt"), src: $("slotSrc"), final: $("slotFinal"), verd: $("slotVerd"), good: $("slotGood"), bad: $("slotBad") };
+/* Keep the rubric at the same place in the list when switching tabs. The rubric scrolls in the
+   window on the Rubric tab and inside its side panel elsewhere (different row heights), so the
+   position is remembered as "which row is at the top, and how far through it" rather than pixels. */
+const winMode = t => t === "rubric" || window.innerWidth <= 960;
+const rowEls = () => [...document.querySelectorAll("#body tr")];
+function topLine(t){
+  if (winMode(t)) return 0;
+  const h = rubricBox.querySelector(".rhead");
+  return slots[t].getBoundingClientRect().top + (h ? h.getBoundingClientRect().height : 0);
+}
+function getPos(){
+  const rows = rowEls(); if (!rows.length) return null;
+  const line = topLine(curTab);
+  for (let i = 0; i < rows.length; i++){
+    const r = rows[i].getBoundingClientRect();
+    if (r.bottom > line + 1) return { i, frac: r.height ? Math.min(1, Math.max(0, (line - r.top) / r.height)) : 0 };
+  }
+  return { i: rows.length - 1, frac: 1 };
+}
+function applyPos(p){
+  const rows = rowEls(); if (!p || !rows.length) return;
+  if (!winMode(curTab)) window.scrollTo(0, 0);
+  const row = rows[Math.min(p.i, rows.length - 1)], r = row.getBoundingClientRect();
+  const delta = r.top + p.frac * r.height - topLine(curTab);
+  if (winMode(curTab)) window.scrollTo(0, p.i === 0 && p.frac === 0 ? 0 : Math.max(0, window.scrollY + delta));
+  else slots[curTab].scrollTop = Math.max(0, slots[curTab].scrollTop + delta);
+}
+
+function showTab(t){
+  if (t === curTab) return;
+  stopHold();
+  const pos = getPos();
+  curTab = t;
+  document.querySelectorAll(".tab").forEach(b => { const on = b.dataset.tab === t; b.classList.toggle("on", on); b.setAttribute("aria-selected", on); });
+  Object.keys(panes).forEach(k => { panes[k].hidden = k !== t; });
+  players.forEach(p => p.pause());
+  /* one shared rubric element: moved, never copied, so every tab shows the same live data */
+  slots[t].appendChild(rubricBox);
+  rubricBox.classList.toggle("compact", t !== "rubric");
+  document.querySelectorAll("#body textarea").forEach(fit);
+  applyPos(pos);
+}
+document.querySelector(".tabs").addEventListener("click", e => { const b = e.target.closest(".tab"); if (b) showTab(b.dataset.tab); });
+
+/* ---------- video player ---------- */
+const ICON = {
+  play: '<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>',
+  pause: '<svg viewBox="0 0 24 24"><path d="M6 5h4v14H6zm8 0h4v14h-4z"/></svg>',
+  vol: '<svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9zm13.5 3A4.5 4.5 0 0 0 14 8v8a4.5 4.5 0 0 0 2.5-4zM14 3.2v2.1a7 7 0 0 1 0 13.4v2.1a9 9 0 0 0 0-17.6z"/></svg>',
+  mute: '<svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9zm13.6 3 2.5-2.5-1.4-1.4-2.5 2.5-2.5-2.5-1.4 1.4 2.5 2.5-2.5 2.5 1.4 1.4 2.5-2.5 2.5 2.5 1.4-1.4z"/></svg>'
+};
+const audio = { v: 1, m: false };
+const players = new Set();
+const syncAudio = () => players.forEach(p => p.syncAudio());
+
+/* mm:ss.mmm (always three millisecond digits) */
+function fmt(t){
+  /* truncate to whole milliseconds (never round up, so .9996 shows as .999 not the next second);
+     the 1e-6 only absorbs floating-point noise such as 65.00499999999999 */
+  const ms = Math.floor(Math.max(0, isFinite(t) ? t : 0) * 1000 + 1e-6);
+  const m = Math.floor(ms / 60000), s = Math.floor(ms % 60000 / 1000), r = ms % 1000;
+  return String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0") + "." + String(r).padStart(3, "0");
+}
+
+async function copyText(text, tip){
+  let ok = false;
+  try { await navigator.clipboard.writeText(text); ok = true; }
+  catch (_) {
+    const t = document.createElement("textarea"); t.value = text; document.body.appendChild(t); t.select();
+    try { ok = document.execCommand("copy"); } catch (_) {}
+    t.remove();
+  }
+  tip.textContent = ok ? "Copied" : "Copy failed";
+  clearTimeout(tip._t); tip._t = setTimeout(() => { tip.textContent = ""; }, 1300);
+}
+
+function makePlayer(host, url, name, copyPrefix = ""){
+  host.innerHTML = `<div class="player"><video playsinline preload="metadata"></video>
+    <div class="perr" hidden></div>
+    <div class="ctl">
+      <button class="pp" aria-label="Play">${ICON.play}</button>
+      <input class="seek" type="range" min="0" max="0" step="0.001" value="0" aria-label="Seek">
+      <button class="ts" title="Click to copy the time">00:00.000</button>
+      <span class="dur">/ 00:00.000</span><span class="tip" aria-live="polite"></span>
+      <button class="mute" aria-label="Mute"></button>
+      <input class="vol" type="range" min="0" max="1" step="0.01" aria-label="Volume">
+    </div></div>`;
+  const q = c => host.querySelector(c);
+  const v = q("video"), pp = q(".pp"), seek = q(".seek"), ts = q(".ts"), dur = q(".dur"),
+        tip = q(".tip"), mute = q(".mute"), vol = q(".vol"), err = q(".perr");
+  let drag = false, raf = 0;
+  const tipEl = document.createElement("div");
+  tipEl.className = "seektip"; tipEl.hidden = true; document.body.appendChild(tipEl);
+  v.src = url;
+
+  const upd = () => { ts.textContent = fmt(v.currentTime); if (!drag) seek.value = v.currentTime; };
+  const loop = () => { upd(); raf = requestAnimationFrame(loop); };
+  const setIcon = playing => { pp.innerHTML = playing ? ICON.pause : ICON.play; pp.setAttribute("aria-label", playing ? "Pause" : "Play"); };
+  const toggle = () => { if (v.paused){ const r = v.play(); if (r && r.catch) r.catch(() => {}); } else v.pause(); };
+
+  v.addEventListener("play", () => { setIcon(true); cancelAnimationFrame(raf); loop(); });
+  v.addEventListener("pause", () => { setIcon(false); cancelAnimationFrame(raf); upd(); });
+  v.addEventListener("loadedmetadata", () => { seek.max = v.duration; dur.textContent = "/ " + fmt(v.duration); upd(); });
+  v.addEventListener("seeked", upd);
+  v.addEventListener("timeupdate", () => { if (v.paused) upd(); });
+  v.addEventListener("error", () => { err.hidden = false; err.textContent = "This browser can't play " + name + ". Try an MP4 (H.264) or WebM version."; });
+  pp.addEventListener("click", toggle);
+  v.addEventListener("click", toggle);
+  seek.addEventListener("pointerdown", () => { drag = true; });
+  ["pointerup", "pointercancel", "change"].forEach(ev => seek.addEventListener(ev, () => { drag = false; }));
+  seek.addEventListener("mousemove", e => {
+    if (!(v.duration > 0) || !isFinite(v.duration)) return;
+    const r = seek.getBoundingClientRect(), th = 16;   /* allow for the slider thumb's inset */
+    const f = Math.min(1, Math.max(0, (e.clientX - r.left - th / 2) / Math.max(1, r.width - th)));
+    tipEl.textContent = fmt(f * v.duration);
+    tipEl.style.left = e.clientX + "px"; tipEl.style.top = (e.clientY - 14) + "px"; tipEl.hidden = false;
+  });
+  seek.addEventListener("mouseleave", () => { tipEl.hidden = true; });
+  seek.addEventListener("input", () => { v.currentTime = +seek.value; ts.textContent = fmt(v.currentTime); });
+  ts.addEventListener("click", () => copyText((copyPrefix ? copyPrefix + " " : "") + ts.textContent, tip));
+  mute.addEventListener("click", () => { audio.m = !audio.m; syncAudio(); });
+  vol.addEventListener("input", () => { audio.v = +vol.value; audio.m = audio.v === 0; syncAudio(); });
+
+  const api = {
+    pause: () => v.pause(), toggle,
+    seekBy(d){ const end = isFinite(v.duration) ? v.duration : Infinity; v.currentTime = Math.min(end, Math.max(0, v.currentTime + d)); upd(); },
+    syncAudio(){ v.volume = audio.v; v.muted = audio.m; vol.value = audio.m ? 0 : audio.v; mute.innerHTML = (audio.m || audio.v === 0) ? ICON.mute : ICON.vol; mute.setAttribute("aria-label", audio.m ? "Unmute" : "Mute"); },
+    destroy(){ tipEl.remove(); cancelAnimationFrame(raf); v.pause(); v.removeAttribute("src"); v.load(); players.delete(api); host.innerHTML = ""; }
+  };
+  players.add(api); api.syncAudio();
+  return api;
+}
+
+const isVideo = f => /^video\//.test(f.type) || /\.(mp4|m4v|mov|webm|mkv|ogv)$/i.test(f.name);
+const stem = n => n.replace(/\.[^.]+$/, "");
+
+/* ---------- source clips ---------- */
+let clips = [], activeClip = null;
+
+function removeClip(i){
+  const c = clips[i]; c.player.destroy(); c.host.remove(); URL.revokeObjectURL(c.url);
+  clips.splice(i, 1);
+  if (activeClip === c) activeClip = clips[Math.min(i, clips.length - 1)] || null;
+}
+
+function renderClips(){
+  $("clipTabs").innerHTML = clips.map((c, i) =>
+    `<span class="sub${c === activeClip ? " on" : ""}"><button class="subbtn" role="tab" aria-selected="${c === activeClip}" data-i="${i}" title="${esc(c.name)}">${esc(stem(c.name))}</button></span>`).join("");
+  clips.forEach(c => { const on = c === activeClip; c.host.hidden = !on; if (!on) c.player.pause(); });
+  $("clipTabs").hidden = !clips.length;
+  $("srcEmpty").hidden = clips.length > 0;
+  $("srcTab").textContent = clips.length ? "Source Clips (" + clips.length + ")" : "Source Clips";
+}
+
+$("clipTabs").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  const i = +b.dataset.i;
+  activeClip = clips[i];
+  renderClips();
+});
+
+$("upSrc").addEventListener("change", e => {
+  const files = [...e.target.files]; e.target.value = "";
+  const vids = files.filter(isVideo), bad = files.filter(f => !isVideo(f));
+  vids.forEach(f => {
+    const old = clips.findIndex(c => c.name === f.name); if (old >= 0) removeClip(old);
+    const url = URL.createObjectURL(f), host = document.createElement("div");
+    host.hidden = true; $("clipStage").appendChild(host);
+    clips.push({ name: f.name, url, host, player: makePlayer(host, url, f.name, stem(f.name)) });
+  });
+  clips.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" }));
+  if (!activeClip || !clips.includes(activeClip)) activeClip = clips[0] || null;
+  renderClips();
+  note(bad.length ? "Skipped " + bad.length + " file(s) that aren't videos: " + bad.map(f => f.name).join(", ") : "");
+});
+
+/* ---------- final edit ---------- */
+let finalPlayer = null, finalUrl = "";
+$("upFin").addEventListener("change", e => {
+  const f = e.target.files[0]; e.target.value = ""; if (!f) return;
+  if (!isVideo(f)){ note(f.name + " isn't a video file."); return; }
+  if (finalPlayer) finalPlayer.destroy();
+  if (finalUrl) URL.revokeObjectURL(finalUrl);
+  finalUrl = URL.createObjectURL(f);
+  $("finalStage").innerHTML = '<div class="vname"></div><div></div>';
+  $("finalStage").firstChild.textContent = f.name;
+  finalPlayer = makePlayer($("finalStage").lastChild, finalUrl, f.name);
+  $("finEmpty").hidden = true; note("");
+});
+
+/* keyboard: space = play/pause; A or Left = back, D or Right = forward; hold to keep scrubbing */
+const SKIP = 5, HOLD_DELAY = 350, HOLD_EVERY = 200;   /* seconds per jump, ms before scrubbing starts, ms between jumps */
+const KEYDIR = { a: -1, arrowleft: -1, d: 1, arrowright: 1 };
+const activePlayer = () => curTab === "src" ? (activeClip && activeClip.player) : curTab === "final" ? finalPlayer : null;
+const typing = el => !!el && (/^(TEXTAREA|SELECT)$/.test(el.tagName) || el.isContentEditable ||
+  (el.tagName === "INPUT" && !el.classList.contains("seek")));   /* the seek slider is ours, so it still skips */
+let hold = null;
+function stopHold(){ if (hold){ clearTimeout(hold.t1); clearInterval(hold.t2); hold = null; } }
+function stepBy(dir){ const p = activePlayer(); if (p) p.seekBy(dir * SKIP); else stopHold(); }
+
+document.addEventListener("keydown", e => {
+  if (e.ctrlKey || e.metaKey || e.altKey || typing(e.target)) return;
+  const p = activePlayer(); if (!p) return;
+  if (e.code === "Space"){
+    if (/^(BUTTON|LABEL)$/.test(e.target.tagName) || e.target.tagName === "INPUT") return;
+    e.preventDefault(); p.toggle(); return;
+  }
+  const key = (e.key || "").toLowerCase(), dir = KEYDIR[key];
+  if (!dir) return;
+  e.preventDefault();
+  if (e.repeat) return;                 /* our own timer sets the scrub speed, not the OS key repeat */
+  stopHold(); stepBy(dir);
+  const h = hold = { key };
+  h.t1 = setTimeout(() => { h.t2 = setInterval(() => stepBy(dir), HOLD_EVERY); }, HOLD_DELAY);
+});
+document.addEventListener("keyup", e => { if (hold && (e.key || "").toLowerCase() === hold.key) stopHold(); });
+window.addEventListener("blur", stopHold);
+
+/* ---------- verdict disagreements (separate from the CSV: never part of the download) ---------- */
+let verdict = "";
+function syncOpts(){
+  document.querySelectorAll(".opt").forEach(b => { const on = b.dataset.v === verdict; b.classList.toggle("on", on); b.setAttribute("aria-pressed", on); });
+}
+$("vopts").addEventListener("click", e => {
+  const b = e.target.closest(".opt"); if (!b) return;
+  verdict = verdict === b.dataset.v ? "" : b.dataset.v; syncOpts(); $("vmsg").textContent = "";
+});
+function addVerdict(){
+  const c = $("vc").value.trim(), m = $("vmsg");
+  if (!c || !verdict){
+    m.textContent = !c && !verdict ? "Enter a criterion # and choose a verdict type." : !c ? "Enter a criterion #." : "Choose a verdict type.";
+    return;
+  }
+  m.textContent = "";
+  const n = $("notes");
+  n.value += (n.value && !/\n$/.test(n.value) ? "\n" : "") + c + " - " + verdict;
+  $("vc").value = "";
+  n.focus(); n.setSelectionRange(n.value.length, n.value.length); n.scrollTop = n.scrollHeight;
+}
+$("vadd").addEventListener("click", addVerdict);
+$("vc").addEventListener("keydown", e => { if (e.key === "Enter"){ e.preventDefault(); addVerdict(); } });
+function wireCopy(btn, area, tipId){
+  $(btn).addEventListener("click", () => {
+    const t = $(area).value.replace(/\s+$/, ""), tip = $(tipId);
+    if (!t){ tip.textContent = "Nothing to copy"; clearTimeout(tip._t); tip._t = setTimeout(() => { tip.textContent = ""; }, 1300); return; }
+    copyText(t, tip);
+  });
+}
+wireCopy("vcopy", "notes", "ntip"); wireCopy("gcopy", "notesGood", "gtip"); wireCopy("bcopy", "notesBad", "btip");
+
+/* ---------- New Task: clear everything back to the empty starting view ---------- */
+$("newTask").addEventListener("click", () => {
+  if (!confirm("Start a new task? This removes the CSV, all videos and all notes. Download your CSV first if you still need it.")) return;
+  /* rubric / CSV */
+  head = []; recs = []; ix = {}; evIx = -1; fname = "rubric.csv"; dirty = false;
+  meta = { bom: false, eol: "\n", trail: true, all: false };
+  $("body").innerHTML = ""; $("tbl").hidden = true; $("empty").hidden = false; $("dl").disabled = true;
+  $("file").textContent = "No file loaded";
+  document.querySelectorAll(".scoreV").forEach(el => { el.textContent = "\u2014"; });
+  document.querySelectorAll(".subV").forEach(el => { el.textContent = ""; });
+  /* videos */
+  while (clips.length) removeClip(0);
+  activeClip = null; renderClips();
+  if (finalPlayer){ finalPlayer.destroy(); finalPlayer = null; }
+  if (finalUrl){ URL.revokeObjectURL(finalUrl); finalUrl = ""; }
+  $("finalStage").innerHTML = ""; $("finEmpty").hidden = false;
+  /* notepads and verdict fields */
+  ["notes", "notesGood", "notesBad", "notesPrompt", "vc"].forEach(id => { $(id).value = ""; });
+  ["ntip", "gtip", "btip", "vmsg"].forEach(id => { $(id).textContent = ""; });
+  verdict = ""; syncOpts();
+  note("");
+  /* back to the first tab, scrolled to the top */
+  showTab("rubric");
+  Object.values(slots).forEach(el => { el.scrollTop = 0; });
+  window.scrollTo(0, 0);
+});
+</script>
+</body>
+</html>
