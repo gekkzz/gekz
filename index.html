@@ -71,6 +71,9 @@ td.id textarea{color:var(--mut)}
 .ctl{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:10px 12px;background:var(--panel);color:var(--fg)}
 .ctl button{all:unset;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:8px}
 .ctl button:hover{background:var(--btn)}
+.ctl button[disabled]{opacity:.35;cursor:not-allowed;background:none}
+.spdgrp{display:inline-flex;align-items:center}
+.ctl .spd{width:auto;min-width:46px;padding:0 4px;font:600 13px/1 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
 .ctl svg{width:20px;height:20px;fill:currentColor}
 .ctl .ts{width:auto;padding:0 10px;border:1px solid var(--line);font:600 14px/1 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-variant-numeric:tabular-nums}
 .dur{color:var(--mut);font:13px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
@@ -115,7 +118,8 @@ td::before{display:none}
 .notes{height:calc(100vh - 250px);min-height:260px;overflow:auto;resize:vertical;border-color:var(--line);background:var(--panel);padding:12px;line-height:1.5}
 .notes.solo{height:calc(100vh - 180px)}
 .nhead.top{margin-top:0}
-.notes.nohead{height:calc(100vh - 130px)}
+.btn.sq{padding:3px 12px;min-width:38px;text-align:center;font-size:18px;line-height:1.25}
+#pfsVal{min-width:46px;text-align:center}
 </style>
 </head>
 <body>
@@ -159,7 +163,11 @@ td::before{display:none}
 
 <section id="p-prompt" hidden>
   <div class="split">
-    <div class="stage"><textarea id="notesPrompt" class="notes solo nohead" spellcheck="false" aria-label="Prompt" placeholder="Copy paste the task's prompt here to easily compare"></textarea></div>
+    <div class="stage">
+      <div class="nhead top"><label for="notesPrompt">Prompt</label>
+        <span class="nact"><button class="btn sq" id="pfsDown" aria-label="Decrease font size" title="Smaller text">&minus;</button><span class="tip" id="pfsVal" aria-live="polite">15px</span><button class="btn sq" id="pfsUp" aria-label="Increase font size" title="Larger text">+</button></span></div>
+      <textarea id="notesPrompt" class="notes solo" spellcheck="false" placeholder="Copy paste the task's prompt here to easily compare"></textarea>
+    </div>
     <div class="side" id="slotPrompt"></div>
   </div>
 </section>
@@ -451,13 +459,24 @@ function makePlayer(host, url, name, copyPrefix = ""){
       <input class="seek" type="range" min="0" max="0" step="0.001" value="0" aria-label="Seek">
       <button class="ts" title="Click to copy the time">00:00.000</button>
       <span class="dur">/ 00:00.000</span><span class="tip" aria-live="polite"></span>
+      <span class="spdgrp"><button class="spdd" aria-label="Slower" title="Slower">&minus;</button><button class="spd" aria-label="Playback speed (click to reset to 1x)" title="Click to reset to 1&times;">1&times;</button><button class="spdu" aria-label="Faster" title="Faster">+</button></span>
       <button class="mute" aria-label="Mute"></button>
       <input class="vol" type="range" min="0" max="1" step="0.01" aria-label="Volume">
     </div></div>`;
   const q = c => host.querySelector(c);
   const v = q("video"), pp = q(".pp"), seek = q(".seek"), ts = q(".ts"), dur = q(".dur"),
-        tip = q(".tip"), mute = q(".mute"), vol = q(".vol"), err = q(".perr");
-  let drag = false, raf = 0;
+        tip = q(".tip"), mute = q(".mute"), vol = q(".vol"), err = q(".perr"),
+        spdD = q(".spdd"), spdU = q(".spdu"), spd = q(".spd");
+  let drag = false, raf = 0, rate = 1;
+  const SPD_MIN = 0.25, SPD_MAX = 3, SPD_STEP = 0.25;   /* playback speed range and step */
+  const setSpeed = r => {
+    rate = Math.min(SPD_MAX, Math.max(SPD_MIN, Math.round(r * 100) / 100));
+    v.playbackRate = rate; spd.textContent = rate + "\u00d7";
+    spdD.disabled = rate <= SPD_MIN; spdU.disabled = rate >= SPD_MAX;
+  };
+  spdD.addEventListener("click", () => setSpeed(rate - SPD_STEP));
+  spdU.addEventListener("click", () => setSpeed(rate + SPD_STEP));
+  spd.addEventListener("click", () => setSpeed(1));
   const tipEl = document.createElement("div");
   tipEl.className = "seektip"; tipEl.hidden = true; document.body.appendChild(tipEl);
   v.src = url;
@@ -496,7 +515,7 @@ function makePlayer(host, url, name, copyPrefix = ""){
     syncAudio(){ v.volume = audio.v; v.muted = audio.m; vol.value = audio.m ? 0 : audio.v; mute.innerHTML = (audio.m || audio.v === 0) ? ICON.mute : ICON.vol; mute.setAttribute("aria-label", audio.m ? "Unmute" : "Mute"); },
     destroy(){ tipEl.remove(); cancelAnimationFrame(raf); v.pause(); v.removeAttribute("src"); v.load(); players.delete(api); host.innerHTML = ""; }
   };
-  players.add(api); api.syncAudio();
+  players.add(api); api.syncAudio(); setSpeed(1);
   return api;
 }
 
@@ -643,6 +662,18 @@ $("newTask").addEventListener("click", () => {
   Object.values(slots).forEach(el => { el.scrollTop = 0; });
   window.scrollTo(0, 0);
 });
+
+/* ---------- Prompt notepad text size ---------- */
+const PFS_MIN = 10, PFS_MAX = 40, PFS_STEP = 2;
+let pfs = 15;
+function setPFS(n){
+  pfs = Math.min(PFS_MAX, Math.max(PFS_MIN, n));
+  $("notesPrompt").style.fontSize = pfs + "px"; $("pfsVal").textContent = pfs + "px";
+  $("pfsDown").disabled = pfs <= PFS_MIN; $("pfsUp").disabled = pfs >= PFS_MAX;
+}
+$("pfsDown").addEventListener("click", () => setPFS(pfs - PFS_STEP));
+$("pfsUp").addEventListener("click", () => setPFS(pfs + PFS_STEP));
+setPFS(pfs);
 </script>
 </body>
 </html>
