@@ -120,6 +120,13 @@ td::before{display:none}
 .nhead.top{margin-top:0}
 .btn.sq{padding:3px 12px;min-width:38px;text-align:center;font-size:18px;line-height:1.25}
 #pfsVal{min-width:46px;text-align:center}
+td.c-view{display:none}
+.view{all:unset;display:inline-flex;align-items:center;cursor:pointer;padding:3px 11px;border:2px solid #7cc4ff;border-radius:8px;font-size:13px;font-weight:600;line-height:1.4;color:var(--fg)}
+.view:hover{filter:brightness(1.15);background:var(--btn)}
+.view:focus-visible{outline:2px solid var(--fg);outline-offset:2px}
+.compact tr.hasview{grid-template-columns:64px 76px minmax(0,1fr) auto;grid-template-areas:"id w ts view" "crit crit crit crit" "a1 a1 a2 a2" "ev ev act act"}
+.compact tr.hasview td.c-view{display:block;grid-area:view;align-self:start;justify-self:end;text-align:right}
+.compact td.c-view::before{display:none}
 </style>
 </head>
 <body>
@@ -297,11 +304,12 @@ function draw(){
   $("body").innerHTML = recs.map((r, n) => {
     const t = k => `<textarea rows="1" spellcheck="false" placeholder="\u2014" data-n="${n}" data-k="${k}"${ix[k] < 0 ? " disabled" : ""}></textarea>`;
     return `<tr><td class="id" data-label="ID">${t("id")}</td><td class="c-a1" data-label="Attempt 1 timestamp">${t("a1")}</td><td class="c-a2" data-label="Attempt 2 timestamp">${t("a2")}</td>
-      <td class="crit" data-label="Proposed final criterion">${t("crit")}</td><td class="w" data-label="Weight">${t("w")}</td><td class="c-ts" data-label="Final timestamp">${t("ts")}</td>
+      <td class="crit" data-label="Proposed final criterion">${t("crit")}</td><td class="w" data-label="Weight">${t("w")}</td><td class="c-ts" data-label="Final timestamp">${t("ts")}</td><td class="c-view"><button class="view" data-n="${n}" aria-label="View this timestamp in Source Clips">View</button></td>
       <td class="c-ev"><div class="ev"><button class="p${r.ev==="p"?" on":""}" data-n="${n}" data-v="p">Pass</button><button class="f${r.ev==="f"?" on":""}" data-n="${n}" data-v="f">Fail</button></div></td>
       <td class="act"><button class="del" data-n="${n}" aria-label="Delete row ${n + 1}">Delete</button></td></tr>`;
   }).join("");
   document.querySelectorAll("#body textarea").forEach(a => { a.value = cell(recs[+a.dataset.n], a.dataset.k); fit(a); mark(a); });
+  document.querySelectorAll("#body .view").forEach(b => setView(b, recs[+b.dataset.n]));
   if (head.length) $("file").textContent = fname + " (" + recs.length + " rows)";
   score();
 }
@@ -323,6 +331,7 @@ $("body").addEventListener("input", e => {
   recs[+a.dataset.n].cells[ix[a.dataset.k]] = a.value;
   fit(a); mark(a); dirty = true;
   if (a.dataset.k === "w") score();
+  if (a.dataset.k === "ts") setView(a.closest("tr").querySelector(".view"), recs[+a.dataset.n]);
 });
 window.addEventListener("resize", () => document.querySelectorAll("#body textarea").forEach(fit));
 window.addEventListener("beforeunload", e => { if (dirty || ["notes", "notesGood", "notesBad", "notesPrompt"].some(id => $(id).value.trim())){ e.preventDefault(); e.returnValue = ""; } });
@@ -335,6 +344,7 @@ $("body").addEventListener("click", e => {
     if (!confirm("Delete row " + (id ? "with ID " + id : n + 1) + "?")) return;
     recs.splice(n, 1); dirty = true; draw(); return;
   }
+  if (b.classList.contains("view")){ viewTimestamp(recs[n]); return; }
   const r = recs[n]; r.ev = r.ev === b.dataset.v ? "" : b.dataset.v;
   draw();
 });
@@ -511,6 +521,15 @@ function makePlayer(host, url, name, copyPrefix = ""){
 
   const api = {
     pause: () => v.pause(), toggle,
+    seekTo(t){   /* jump to t seconds and stay paused, waiting for the video's metadata if needed */
+      const go = () => {
+        v.pause();
+        const end = isFinite(v.duration) ? v.duration : Infinity;
+        v.currentTime = Math.min(end, Math.max(0, t)); upd();
+        if (t > end + 0.001){ tip.textContent = "Past end of clip"; clearTimeout(tip._t); tip._t = setTimeout(() => { tip.textContent = ""; }, 4000); }
+      };
+      if (v.readyState >= 1) go(); else v.addEventListener("loadedmetadata", go, { once: true });
+    },
     seekBy(d){ const end = isFinite(v.duration) ? v.duration : Infinity; v.currentTime = Math.min(end, Math.max(0, v.currentTime + d)); upd(); },
     syncAudio(){ v.volume = audio.v; v.muted = audio.m; vol.value = audio.m ? 0 : audio.v; mute.innerHTML = (audio.m || audio.v === 0) ? ICON.mute : ICON.vol; mute.setAttribute("aria-label", audio.m ? "Unmute" : "Mute"); },
     destroy(){ tipEl.remove(); cancelAnimationFrame(raf); v.pause(); v.removeAttribute("src"); v.load(); players.delete(api); host.innerHTML = ""; }
@@ -674,6 +693,30 @@ function setPFS(n){
 $("pfsDown").addEventListener("click", () => setPFS(pfs - PFS_STEP));
 $("pfsUp").addEventListener("click", () => setPFS(pfs + PFS_STEP));
 setPFS(pfs);
+
+/* ---------- View button: jump to "Clip N m:ss.mmm" in the Source Clips tab ---------- */
+/* Only a single clip + time qualifies. "global", "multiple (see criterion)" and ranges do not. */
+function parseSingleTs(txt){
+  const m = /^\s*(.+?)\s+(?:(\d+):)?(\d+):([0-5]\d)(?:\.(\d{1,3}))?\s*$/.exec(txt || "");
+  if (!m || /\d+:\d{2}/.test(m[1])) return null;     /* a time inside the "name" means a range like "0:10 - 0:20" */
+  const sec = (+m[2] || 0) * 3600 + (+m[3]) * 60 + (+m[4]) + (m[5] ? parseFloat("0." + m[5]) : 0);
+  return { name: m[1].trim(), sec };
+}
+const normName = s => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+const findClip = name => clips.find(c => normName(stem(c.name)) === normName(name));
+function setView(btn, r){ if (btn) btn.closest("tr").classList.toggle("hasview", !!parseSingleTs(cell(r, "ts"))); }
+function flash(t){ note(t); setTimeout(() => { if ($("msg").textContent === t) note(""); }, 6000); }
+function viewTimestamp(r){
+  const p = parseSingleTs(cell(r, "ts")); if (!p) return;
+  const c = findClip(p.name);
+  if (!c){
+    flash(clips.length ? "No uploaded source clip matches \"" + p.name + "\". Uploaded clips: " + clips.map(x => stem(x.name)).join(", ") + "."
+                       : "Upload your source clips first, then press View again.");
+    return;
+  }
+  showTab("src"); activeClip = c; renderClips(); note("");
+  c.player.seekTo(p.sec);
+}
 </script>
 </body>
 </html>
