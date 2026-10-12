@@ -83,3 +83,9 @@ Both Notes tabs have a "Copy to clipboard" button at the top right of the notepa
 
 - **A or Left arrow** jumps back 5 seconds, **D or Right arrow** jumps forward 5 seconds, and **space** plays or pauses, on the Source Clips and Final Edit players. Holding A, D or an arrow key keeps scrubbing in that direction (a 5 second jump every 0.2 seconds after a short delay). The keys are ignored while you are typing in a text field, a dropdown, or the volume slider, and when Ctrl, Cmd or Alt is held. The speeds are the `SKIP`, `HOLD_DELAY` and `HOLD_EVERY` constants in `index.html`.
 - Times are shown truncated to whole milliseconds, never rounded up (a position of 5.9996 seconds shows as `00:05.999`, not `00:06.000`). The duration, the current time, the hover popup and copied timestamps all use the same rule. Some video files store a rounded duration in the file itself, which no player can see past.
+
+## View button (final timestamps)
+
+In the split-view rubric (every tab except Rubric), a "View" button with a light blue outline appears in the top-right corner of a row's card, lined up with the Delete button below it, when that row's "Proposed final timestamp" is a single clip and time, such as `Clip 1 0:47.833`. Pressing it opens the Source Clips tab, selects that clip (matched to the uploaded file names ignoring case, spaces and punctuation, so `Clip 1` matches `Clip 1.mp4`), and moves the video to that time, paused. `global`, `multiple (see criterion)` and ranges such as `Clip 1 0:32.854-2:21.480` get no button. The button appears or disappears as you edit the timestamp.
+
+Ranges such as `Clip 1 0:32.854-2:21.480` also get a View button, in a lighter blue. It jumps to the range's start time, paused.
