@@ -89,3 +89,22 @@ Both Notes tabs have a "Copy to clipboard" button at the top right of the notepa
 In the split-view rubric (every tab except Rubric), a "View" button with a light blue outline appears in the top-right corner of a row's card, lined up with the Delete button below it, when that row's "Proposed final timestamp" is a single clip and time, such as `Clip 1 0:47.833`. Pressing it opens the Source Clips tab, selects that clip (matched to the uploaded file names ignoring case, spaces and punctuation, so `Clip 1` matches `Clip 1.mp4`), and moves the video to that time, paused. `global`, `multiple (see criterion)` and ranges such as `Clip 1 0:32.854-2:21.480` get no button. The button appears or disappears as you edit the timestamp.
 
 Ranges such as `Clip 1 0:32.854-2:21.480` also get a View button, in a lighter blue. It jumps to the range's start time, paused.
+
+## Test Against Rubric (Prompt tab)
+
+The "Test Against Rubric" button above the Prompt notepad asks Claude (Opus 5.5) to compare the prompt with each rubric row's "Proposed final criterion". Results appear below the notepad in three groups: contradictions, prompt requests missing from the rubric, and rubric rows the prompt didn't ask for. Each item has a confidence level, and row IDs are clickable to jump to that row. The panel also shows the exact tokens and cost of each check.
+
+What is sent: only the prompt text and each row's ID and proposed final criterion, and only when you press the button. Nothing else from the CSV, no videos, no notes. The CSV download is unaffected.
+
+### One-time setup
+
+1. Claude Console (platform.claude.com): sign up (same email is fine), add billing, and optionally set a spend limit. API usage is billed separately from a Claude Pro subscription.
+2. In the Console, create an API key and copy it.
+3. In Vercel: your project > Settings > Environment Variables, add
+   - `ANTHROPIC_API_KEY` = the key
+   - `CHECK_PASSWORD` = a password you choose (the page asks for it once per visit)
+4. Upload `index.html` and the `api` folder (containing `check.js`) to the GitHub repo. Vercel deploys them automatically.
+
+Never put the API key in index.html or GitHub: the repo is public.
+
+Settings at the top of `api/check.js`: `MODEL`, `EFFORT` ("low" is cheaper, "high" more thorough), and the prices used for the cost estimate.

@@ -128,6 +128,30 @@ td.c-view{display:none}
 .compact tr.hasview{grid-template-columns:64px 76px minmax(0,1fr) auto;grid-template-areas:"id w ts view" "crit crit crit crit" "a1 a1 a2 a2" "ev ev act act"}
 .compact tr.hasview td.c-view{display:block;grid-area:view;align-self:start;justify-self:end;text-align:right}
 .compact td.c-view::before{display:none}
+.phead{display:grid;grid-template-columns:1fr auto 1fr;align-items:center}
+.phead .nact{justify-self:end}
+.btn.o-cyan{border:2px solid #7cc4ff;padding:7px 13px}
+.btn.o-cyan:disabled{opacity:.6;cursor:progress}
+#p-prompt .stage.hastc #notesPrompt{height:calc(55vh - 120px);min-height:140px}
+.tc{margin-top:10px;border:1px solid var(--line);border-radius:10px;background:var(--panel);max-height:42vh;overflow:auto}
+.tchead{position:sticky;top:0;z-index:1;display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 12px;background:var(--panel);border-bottom:1px solid var(--line);font-size:14px}
+.tcpw{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:12px;font-size:14px}
+.tcpw input{padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--fg);font:inherit}
+.tcbody{padding:4px 12px 12px;font-size:14px;line-height:1.45}
+.tcbody h4{margin:14px 0 6px;font-size:14px}
+.tcbody ul{margin:0;padding:0;list-style:none;display:grid;gap:8px}
+.tcbody li{border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+.tcbody .q{color:var(--mut)}
+.tcbody .none{color:var(--mut);margin:0}
+.tcbody .err{color:#e5534b}
+.tcbody .meta,.tcbody .stale{color:var(--mut);font-size:12px;margin-top:12px}
+.tcbody .stale{color:#d4a72c}
+.rid{all:unset;cursor:pointer;font-weight:700;padding:0 6px;border:1px solid var(--line);border-radius:6px;margin-right:6px}
+.rid:hover{border-color:var(--mut)}
+.rid:focus-visible{outline:2px solid var(--fg);outline-offset:2px}
+.conf{font-size:11px;padding:1px 6px;border-radius:999px;border:1px solid var(--line);color:var(--mut);margin-left:6px;white-space:nowrap}
+.conf.high{border-color:#e5534b;color:#e5534b}.conf.medium{border-color:#d4a72c;color:#d4a72c}
+tr.flashrow{outline:2px solid #7cc4ff;outline-offset:-2px}
 </style>
 </head>
 <body>
@@ -172,9 +196,15 @@ td.c-view{display:none}
 <section id="p-prompt" hidden>
   <div class="split">
     <div class="stage">
-      <div class="nhead top"><label for="notesPrompt">Prompt</label>
+      <div class="nhead top phead"><label for="notesPrompt">Prompt</label>
+        <button class="btn o-cyan" id="tcRun">Test Against Rubric</button>
         <span class="nact"><button class="btn sq" id="pfsDown" aria-label="Decrease font size" title="Smaller text">&minus;</button><span class="tip" id="pfsVal" aria-live="polite">15px</span><button class="btn sq" id="pfsUp" aria-label="Increase font size" title="Larger text">+</button></span></div>
       <textarea id="notesPrompt" class="notes solo" spellcheck="false" placeholder="Copy paste the task's prompt here to easily compare"></textarea>
+      <div id="tc" class="tc" hidden>
+        <div class="tchead"><b>Rubric check</b><span class="nact"><span class="tip" id="tcTip" aria-live="polite"></span><button class="btn" id="tcCopy" hidden>Copy results</button><button class="btn" id="tcClose" aria-label="Close results">Close</button></span></div>
+        <form id="tcPw" class="tcpw" hidden><label for="tcPwIn">Check password</label><input id="tcPwIn" type="password" autocomplete="current-password"><button class="btn o-cyan" type="submit">Run check</button></form>
+        <div id="tcBody" class="tcbody" aria-live="polite"></div>
+      </div>
     </div>
     <div class="side" id="slotPrompt"></div>
   </div>
@@ -674,6 +704,7 @@ $("newTask").addEventListener("click", () => {
   $("finalStage").innerHTML = ""; $("finEmpty").hidden = false;
   /* notepads and verdict fields */
   ["notes", "notesGood", "notesBad", "notesPrompt", "vc"].forEach(id => { $(id).value = ""; });
+  tcReset();
   ["ntip", "gtip", "btip", "vmsg"].forEach(id => { $(id).textContent = ""; });
   verdict = ""; syncOpts();
   note("");
@@ -726,6 +757,101 @@ function viewTimestamp(r){
   showTab("src"); activeClip = c; renderClips(); note("");
   c.player.seekTo(p.sec);
 }
+
+/* ---------- Test Against Rubric (Prompt tab) ----------
+   Sends the prompt and each row's ID + proposed final criterion to /api/check (a Vercel function
+   that calls Claude). Nothing else from the CSV is sent, and nothing is sent until the button is pressed. */
+let tcPass = "", tcBusy = false, tcLast = null, tcSig = "", tcCtl = null;
+const escA = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+const tcRows = () => recs.map((r, i) => ({ id: cell(r, "id").trim() || "#" + (i + 1), criterion: cell(r, "crit").trim() }));
+const tcSignature = () => JSON.stringify([$("notesPrompt").value.trim(), tcRows()]);
+function tcShow(on){ $("tc").hidden = !on; $("notesPrompt").closest(".stage").classList.toggle("hastc", on); }
+function tcReset(){ if (tcCtl) tcCtl.abort(); tcLast = null; tcSig = ""; $("tcBody").innerHTML = ""; $("tcPw").hidden = true; $("tcCopy").hidden = true; tcShow(false); }
+function tcMsg(html){ $("tcBody").innerHTML = html; }
+
+function tcStart(){
+  if (tcBusy) return;
+  tcShow(true); $("tcCopy").hidden = true;
+  if (location.protocol === "file:"){ tcMsg('<p class="err">The rubric check only works on your Vercel site, not when index.html is opened from your computer.</p>'); return; }
+  if (!$("notesPrompt").value.trim()){ tcMsg('<p class="err">Paste the task\'s prompt into the notepad first.</p>'); return; }
+  if (!tcRows().some(r => r.criterion)){ tcMsg('<p class="err">Upload a rubric CSV with a "Proposed final criterion" column first.</p>'); return; }
+  if (!tcPass){ $("tcPw").hidden = false; tcMsg(""); $("tcPwIn").focus(); return; }
+  tcRun();
+}
+
+async function tcRun(){
+  tcBusy = true; $("tcRun").disabled = true; $("tcPw").hidden = true;
+  const sig = tcSignature(), t0 = Date.now();
+  tcMsg('<p>Checking with Claude… <span id="tcSec">0</span>s (usually under a minute)</p>');
+  const timer = setInterval(() => { const e = $("tcSec"); if (e) e.textContent = Math.round((Date.now() - t0) / 1000); }, 1000);
+  tcCtl = new AbortController(); const kill = setTimeout(() => tcCtl.abort(), 200000);
+  try {
+    const res = await fetch("/api/check", { method: "POST", signal: tcCtl.signal,
+      headers: { "content-type": "application/json", "x-check-password": tcPass },
+      body: JSON.stringify({ prompt: $("notesPrompt").value, rows: tcRows() }) });
+    const data = await res.json().catch(() => null);
+    if (res.status === 401){ tcPass = ""; $("tcPw").hidden = false; $("tcPwIn").value = ""; tcMsg('<p class="err">Wrong password. Try again.</p>'); return; }
+    if (res.status === 404){ tcMsg('<p class="err">The check isn\'t set up on this site yet: the api/check.js file is missing from the deployment.</p>'); return; }
+    if (!res.ok || !data || !data.report){ tcMsg('<p class="err">' + escA((data && data.error) || ("The check failed (HTTP " + res.status + ").")) + '</p>' + tcMeta(data && data.meta)); return; }
+    tcLast = data; tcSig = sig; tcRender();
+  } catch (e) {
+    tcMsg('<p class="err">' + (e.name === "AbortError" ? "The check was stopped." : "Could not reach the check service. Check your connection and try again.") + '</p>');
+  } finally {
+    clearInterval(timer); clearTimeout(kill); tcCtl = null; tcBusy = false; $("tcRun").disabled = false;
+  }
+}
+
+function tcMeta(m){
+  if (!m) return "";
+  return '<div class="meta">' + escA(m.model) + " · " + (m.input_tokens || 0).toLocaleString() + " in / " + (m.output_tokens || 0).toLocaleString() + " out"
+    + (m.thinking_tokens ? " (incl. " + m.thinking_tokens.toLocaleString() + " thinking)" : "") + " ≈ $" + (m.cost_usd || 0).toFixed(3)
+    + " · " + Math.round(m.seconds || 0) + "s. AI-generated: double-check before acting.</div>";
+}
+
+function tcRender(){
+  if (!tcLast) return;
+  const r = tcLast.report, conf = c => '<span class="conf ' + escA(String(c || "").toLowerCase()) + '">' + escA(c || "") + '</span>';
+  const rid = id => '<button class="rid" data-rid="' + escA(id) + '" title="Show this row in the rubric">' + escA(id) + '</button>';
+  const sec = (title, items, fn) => '<h4>' + title + ' (' + items.length + ')</h4>' + (items.length ? '<ul>' + items.map(fn).join("") + '</ul>' : '<p class="none">None found.</p>');
+  tcMsg('<p>' + escA(r.summary || "") + '</p>'
+    + sec("Contradictions", r.contradictions || [], x => '<li>' + rid(x.row_id) + escA(x.explanation) + conf(x.confidence)
+        + '<div class="q">Prompt: “' + escA(x.prompt_says) + '”<br>Rubric: ' + escA(x.rubric_says) + '</div></li>')
+    + sec("In the prompt but missing from the rubric", r.missing_from_rubric || [], x => '<li>“' + escA(x.prompt_request) + '”' + conf(x.confidence)
+        + '<div class="q">' + escA(x.explanation) + '</div></li>')
+    + sec("In the rubric but not asked for in the prompt", r.not_in_prompt || [], x => '<li>' + rid(x.row_id) + escA(x.rubric_says) + conf(x.confidence)
+        + '<div class="q">' + escA(x.explanation) + '</div></li>')
+    + tcMeta(tcLast.meta) + '<div class="stale" id="tcStale" hidden>The prompt or rubric changed since this check. Run it again for up-to-date results.</div>');
+  $("tcCopy").hidden = false; tcStaleCheck();
+}
+function tcStaleCheck(){ const e = $("tcStale"); if (e && tcLast) e.hidden = tcSignature() === tcSig; }
+
+function tcText(){
+  const r = tcLast.report, m = tcLast.meta || {}, L = [];
+  L.push("Rubric check: " + (r.summary || ""));
+  L.push("", "Contradictions:"); (r.contradictions || []).forEach(x => L.push("- Row " + x.row_id + " [" + x.confidence + "]: " + x.explanation + ' (Prompt: "' + x.prompt_says + '" / Rubric: ' + x.rubric_says + ")"));
+  if (!(r.contradictions || []).length) L.push("- None found.");
+  L.push("", "In the prompt but missing from the rubric:"); (r.missing_from_rubric || []).forEach(x => L.push('- "' + x.prompt_request + '" [' + x.confidence + "]: " + x.explanation));
+  if (!(r.missing_from_rubric || []).length) L.push("- None found.");
+  L.push("", "In the rubric but not asked for in the prompt:"); (r.not_in_prompt || []).forEach(x => L.push("- Row " + x.row_id + " [" + x.confidence + "]: " + x.rubric_says + " (" + x.explanation + ")"));
+  if (!(r.not_in_prompt || []).length) L.push("- None found.");
+  return L.join("\n");
+}
+
+$("tcRun").addEventListener("click", tcStart);
+$("tcPw").addEventListener("submit", e => { e.preventDefault(); const v = $("tcPwIn").value; if (!v) return; tcPass = v; $("tcPwIn").value = ""; tcRun(); });
+$("tcClose").addEventListener("click", () => { if (tcCtl) tcCtl.abort(); tcShow(false); });
+$("tcCopy").addEventListener("click", () => { if (tcLast) copyText(tcText(), $("tcTip")); });
+$("tcBody").addEventListener("click", e => {
+  const b = e.target.closest(".rid"); if (!b) return;
+  const i = recs.findIndex((r, k) => (cell(r, "id").trim() || "#" + (k + 1)) === b.dataset.rid);
+  const tr = document.querySelectorAll("#body tr")[i];
+  if (!tr){ $("tcTip").textContent = "Row not found"; setTimeout(() => { $("tcTip").textContent = ""; }, 1500); return; }
+  tr.scrollIntoView({ block: "center", behavior: "smooth" });
+  tr.classList.add("flashrow"); setTimeout(() => tr.classList.remove("flashrow"), 2000);
+});
+$("notesPrompt").addEventListener("input", tcStaleCheck);
+$("body").addEventListener("input", tcStaleCheck);
+$("body").addEventListener("click", () => setTimeout(tcStaleCheck));
 </script>
 </body>
 </html>
