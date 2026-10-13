@@ -152,6 +152,9 @@ td.c-view{display:none}
 .conf{font-size:11px;padding:1px 6px;border-radius:999px;border:1px solid var(--line);color:var(--mut);margin-left:6px;white-space:nowrap}
 .conf.high{border-color:#e5534b;color:#e5534b}.conf.medium{border-color:#d4a72c;color:#d4a72c}
 tr.flashrow{outline:2px solid #7cc4ff;outline-offset:-2px}
+.addbot{display:flex;justify-content:flex-end;padding:14px 12px 18px}
+#tbl[hidden] ~ .addbot{display:none}
+.sub.on{border:2px solid #2ea043}
 </style>
 </head>
 <body>
@@ -188,6 +191,7 @@ tr.flashrow{outline:2px solid #7cc4ff;outline-offset:-2px}
     </tr></thead>
     <tbody id="body"></tbody>
   </table>
+  <div class="addbot"><button class="btn o-yellow" id="add2">Add Row</button></div>
   <div class="empty" id="empty">Upload your task's Final Rubric CSV, Source Clips, and Final Edit with the buttons in the top right. Also helpful to copy paste the task's prompt into the prompt tab in the top left to verify rows.</div>
 </div>
 </div>
@@ -335,7 +339,7 @@ function draw(){
   $("body").innerHTML = recs.map((r, n) => {
     const t = k => `<textarea rows="1" spellcheck="false" placeholder="\u2014" data-n="${n}" data-k="${k}"${ix[k] < 0 ? " disabled" : ""}></textarea>`;
     return `<tr><td class="id" data-label="ID">${t("id")}</td><td class="c-a1" data-label="Attempt 1 timestamp">${t("a1")}</td><td class="c-a2" data-label="Attempt 2 timestamp">${t("a2")}</td>
-      <td class="crit" data-label="Proposed final criterion">${t("crit")}</td><td class="w" data-label="Weight">${t("w")}</td><td class="c-ts" data-label="Final timestamp">${t("ts")}</td><td class="c-view"><button class="view" data-n="${n}" aria-label="View this timestamp in Source Clips">View</button></td>
+      <td class="crit" data-label="Proposed final criterion">${t("crit")}</td><td class="w" data-label="Weight">${t("w")}</td><td class="c-ts" data-label="Final timestamp">${t("ts")}</td><td class="c-view"><button class="view" data-n="${n}" aria-label="View this timestamp in Source Clips">View Timestamp</button></td>
       <td class="c-ev"><div class="ev"><button class="p${r.ev==="p"?" on":""}" data-n="${n}" data-v="p">Pass</button><button class="f${r.ev==="f"?" on":""}" data-n="${n}" data-v="f">Fail</button></div></td>
       <td class="act"><button class="del" data-n="${n}" aria-label="Delete row ${n + 1}">Delete</button></td></tr>`;
   }).join("");
@@ -380,17 +384,25 @@ $("body").addEventListener("click", e => {
   draw();
 });
 
-$("add").addEventListener("click", () => {
+function addRow(){
   if (!head.length){
     head = COLS.map(c => c[1]); ix = {}; COLS.forEach(([k], i) => ix[k] = i); evIx = -1; fname = "rubric.csv";
     $("dl").disabled = false; $("tbl").hidden = false; $("empty").hidden = true;
   }
-  recs.push({ cells: head.map(() => ""), orig: head.map(() => ""), ev: "" });
+  /* next ID = highest whole-number ID currently in the rubric + 1 (1 if none) */
+  const nextId = recs.reduce((m, r) => { const n = /^\s*(\d+)\s*$/.exec(cell(r, "id")); return n ? Math.max(m, +n[1]) : m; }, 0) + 1;
+  const cells = head.map(() => "");
+  if (ix.id >= 0) cells[ix.id] = String(nextId);
+  if (ix.crit >= 0) cells[ix.crit] = "The video should ";
+  recs.push({ cells, orig: head.map(() => ""), ev: "" });
   dirty = true; draw();
   const rows = document.querySelectorAll("#body tr"), last = rows[rows.length - 1];
   last.scrollIntoView({ block: "center" });
-  const first = last.querySelector("textarea:not(:disabled)"); if (first) first.focus();
-});
+  const f = last.querySelector('textarea[data-k="crit"]:not(:disabled)') || last.querySelector("textarea:not(:disabled)");
+  if (f){ f.focus(); f.setSelectionRange(f.value.length, f.value.length); }
+}
+$("add").addEventListener("click", addRow);
+$("add2").addEventListener("click", addRow);
 
 $("up").addEventListener("change", e => {
   const f = e.target.files[0]; if (!f) return;
@@ -569,6 +581,8 @@ function makePlayer(host, url, name, copyPrefix = ""){
   return api;
 }
 
+/* copied timestamps always say "Clip X": "clip 2", "CLIP_2", "clip-2", "clip2" -> "Clip 2" */
+const clipLabel = n => n.replace(/^\s*clip[\s_\-.]*(\d+)/i, "Clip $1").replace(/^\s*clip\b/i, "Clip");
 const isVideo = f => /^video\//.test(f.type) || /\.(mp4|m4v|mov|webm|mkv|ogv)$/i.test(f.name);
 const stem = n => n.replace(/\.[^.]+$/, "");
 
@@ -604,7 +618,7 @@ $("upSrc").addEventListener("change", e => {
     const old = clips.findIndex(c => c.name === f.name); if (old >= 0) removeClip(old);
     const url = URL.createObjectURL(f), host = document.createElement("div");
     host.hidden = true; $("clipStage").appendChild(host);
-    clips.push({ name: f.name, url, host, player: makePlayer(host, url, f.name, stem(f.name)) });
+    clips.push({ name: f.name, url, host, player: makePlayer(host, url, f.name, clipLabel(stem(f.name))) });
   });
   clips.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" }));
   if (!activeClip || !clips.includes(activeClip)) activeClip = clips[0] || null;
