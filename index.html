@@ -44,7 +44,7 @@ textarea::placeholder{color:var(--mut)}
 textarea:hover:not(:disabled){border-color:var(--line)}
 textarea:focus{outline:none;border-color:var(--mut);background:var(--panel)}
 textarea.chg{box-shadow:inset 3px 0 0 #d9a21b}
-td.id textarea{color:var(--mut)}
+td.id textarea{color:#d4a72c;font-weight:600}
 .score{color:var(--fg);font-weight:600;font-size:15px;margin-top:2px}
 .scsub{font-size:12px;font-weight:400;color:var(--mut)}
 .ev{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
@@ -125,8 +125,7 @@ td::before{display:none}
 .btn.sq{padding:3px 12px;min-width:38px;text-align:center;font-size:18px;line-height:1.25}
 #pfsVal{min-width:46px;text-align:center}
 td.c-view{display:none}
-.view{all:unset;display:inline-flex;align-items:center;cursor:pointer;padding:3px 11px;border:2px solid #7cc4ff;border-radius:8px;font-size:13px;font-weight:600;line-height:1.4;color:var(--fg)}
-.view.rng{border-color:#b8e2ff}
+.view{all:unset;display:inline-flex;align-items:center;cursor:pointer;padding:3px 11px;border:2px solid #388bfd;border-radius:8px;font-size:13px;font-weight:600;line-height:1.4;color:var(--fg)}
 .view:hover{filter:brightness(1.15);background:var(--btn)}
 .view:focus-visible{outline:2px solid var(--fg);outline-offset:2px}
 .compact td.c-view::before{display:none}
@@ -157,6 +156,8 @@ tr.flashrow{outline:2px solid #7cc4ff;outline-offset:-2px}
 .addbot{display:flex;justify-content:flex-end;padding:14px 12px 18px}
 #tbl[hidden] ~ .addbot{display:none}
 .sub.on{border:2px solid #2ea043}
+.keys{display:flex;flex-wrap:wrap;gap:4px 18px;padding:8px 2px 0;font-size:12px;color:var(--mut);opacity:.75}
+.keys kbd{font:inherit;font-weight:600;padding:0 5px;border:1px solid var(--line);border-radius:4px}
 </style>
 </head>
 <body>
@@ -533,7 +534,8 @@ function makePlayer(host, url, name, copyPrefix = ""){
       <span class="spdgrp"><button class="spdd" aria-label="Slower" title="Slower">&minus;</button><button class="spd" aria-label="Playback speed (click to reset to 1x)" title="Click to reset to 1&times;">1&times;</button><button class="spdu" aria-label="Faster" title="Faster">+</button></span>
       <button class="mute" aria-label="Mute"></button>
       <input class="vol" type="range" min="0" max="1" step="0.01" aria-label="Volume">
-    </div></div>`;
+    </div></div>
+    <div class="keys" aria-label="Keyboard shortcuts"><span><kbd>A</kbd> - Rewind 5s</span><span><kbd>D</kbd> - Forward 5s</span><span><kbd>Space</kbd> - Play/Pause</span><span>Hold A or D to scrub</span></div>`;
   const q = c => host.querySelector(c);
   const v = q("video"), pp = q(".pp"), seek = q(".seek"), ts = q(".ts"), dur = q(".dur"),
         tip = q(".tip"), mute = q(".mute"), vol = q(".vol"), err = q(".perr"),
