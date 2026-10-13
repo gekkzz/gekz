@@ -158,6 +158,14 @@ tr.flashrow{outline:2px solid #7cc4ff;outline-offset:-2px}
 .sub.on{border:2px solid #2ea043}
 .keys{display:flex;flex-wrap:wrap;gap:4px 18px;padding:8px 2px 0;font-size:12px;color:var(--mut);opacity:.75}
 .keys kbd{font:inherit;font-weight:600;padding:0 5px;border:1px solid var(--line);border-radius:4px}
+.tscopy,.tscopied{display:none}
+.compact td.c-ts{display:grid;grid-template-columns:minmax(0,auto) auto auto;align-items:center;column-gap:2px}
+.compact td.c-ts::before{grid-column:1/-1}
+.compact tr.hasview .tscopy{all:unset;display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:6px;cursor:pointer;color:var(--mut)}
+.compact tr.hasview .tscopy:hover{color:var(--fg);background:var(--btn)}
+.compact tr.hasview .tscopy:focus-visible{outline:2px solid var(--fg);outline-offset:1px}
+.tscopy svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.compact tr.hasview .tscopied{display:inline;font-size:12px;color:var(--mut);padding-left:4px;white-space:nowrap}
 </style>
 </head>
 <body>
@@ -359,7 +367,7 @@ function draw(){
   $("body").innerHTML = recs.map((r, n) => {
     const t = k => `<textarea rows="1" spellcheck="false" placeholder="\u2014" data-n="${n}" data-k="${k}"${ix[k] < 0 ? " disabled" : ""}></textarea>`;
     return `<tr><td class="id" data-label="ID">${t("id")}</td><td class="c-a1" data-label="Attempt 1 timestamp">${t("a1")}</td><td class="c-a2" data-label="Attempt 2 timestamp">${t("a2")}</td>
-      <td class="crit" data-label="Proposed final criterion">${t("crit")}</td><td class="w" data-label="Weight">${t("w")}</td><td class="c-ts" data-label="Final timestamp">${t("ts")}</td><td class="c-view"><button class="view" data-n="${n}" aria-label="View this timestamp in Source Clips">View Timestamp</button></td>
+      <td class="crit" data-label="Proposed final criterion">${t("crit")}</td><td class="w" data-label="Weight">${t("w")}</td><td class="c-ts" data-label="Final timestamp">${t("ts")}<button class="tscopy" data-n="${n}" aria-label="Copy final timestamp" title="Copy timestamp"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h8"/></svg></button><span class="tscopied" aria-live="polite"></span></td><td class="c-view"><button class="view" data-n="${n}" aria-label="View this timestamp in Source Clips">View Timestamp</button></td>
       <td class="c-ev"><div class="ev"><button class="p${r.ev==="p"?" on":""}" data-n="${n}" data-v="p">Pass</button><button class="f${r.ev==="f"?" on":""}" data-n="${n}" data-v="f">Fail</button></div></td>
       <td class="act"><button class="del" data-n="${n}" aria-label="Delete row ${n + 1}">Delete</button></td></tr>`;
   }).join("");
@@ -404,6 +412,7 @@ $("body").addEventListener("click", e => {
     recs.splice(n, 1); dirty = true; draw(); return;
   }
   if (b.classList.contains("view")){ viewTimestamp(recs[n]); return; }
+  if (b.classList.contains("tscopy")){ copyText(cell(recs[n], "ts").trim(), b.nextElementSibling); return; }
   const r = recs[n]; pushUndo({ type: "mark", rec: r, before: r.ev }); r.ev = r.ev === b.dataset.v ? "" : b.dataset.v;
   draw();
 });
