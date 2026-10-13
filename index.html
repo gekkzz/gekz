@@ -125,8 +125,8 @@ td::before{display:none}
 .btn.sq{padding:3px 12px;min-width:38px;text-align:center;font-size:18px;line-height:1.25}
 #pfsVal{min-width:46px;text-align:center}
 td.c-view{display:none}
-.view{all:unset;display:inline-flex;align-items:center;cursor:pointer;padding:3px 11px;border:2px solid #388bfd;border-radius:8px;font-size:13px;font-weight:600;line-height:1.4;color:var(--fg)}
-.view:hover{filter:brightness(1.15);background:var(--btn)}
+.view{all:unset;display:inline-flex;align-items:center;cursor:pointer;padding:3px 11px;border:2px solid #2c6ab8;border-radius:8px;font-size:13px;font-weight:400;line-height:1.4;color:var(--mut)}
+.view:hover{border-color:#388bfd;color:var(--fg);background:var(--btn)}
 .view:focus-visible{outline:2px solid var(--fg);outline-offset:2px}
 .compact td.c-view::before{display:none}
 .phead{display:grid;grid-template-columns:1fr auto 1fr;align-items:center}
@@ -153,7 +153,7 @@ td.c-view{display:none}
 .conf{font-size:11px;padding:1px 6px;border-radius:999px;border:1px solid var(--line);color:var(--mut);margin-left:6px;white-space:nowrap}
 .conf.high{border-color:#e5534b;color:#e5534b}.conf.medium{border-color:#d4a72c;color:#d4a72c}
 tr.flashrow{outline:2px solid #7cc4ff;outline-offset:-2px}
-.addbot{display:flex;justify-content:flex-end;padding:14px 12px 18px}
+.addbot{display:flex;justify-content:flex-end;gap:10px;padding:14px 12px 18px}
 #tbl[hidden] ~ .addbot{display:none}
 .sub.on{border:2px solid #2ea043}
 .keys{display:flex;flex-wrap:wrap;gap:4px 18px;padding:8px 2px 0;font-size:12px;color:var(--mut);opacity:.75}
@@ -178,6 +178,7 @@ tr.flashrow{outline:2px solid #7cc4ff;outline-offset:-2px}
     <label class="btn o-green" tabindex="0">Upload Source Clips<input id="upSrc" type="file" accept="video/*" multiple hidden></label>
     <label class="btn o-green" tabindex="0">Upload Final Edit<input id="upFin" type="file" accept="video/*" hidden></label>
     <button class="btn o-blue" id="dl" disabled>Download CSV</button>
+    <button class="btn o-yellow" id="undo" disabled title="Undo the last rubric change">Undo</button>
     <button class="btn o-yellow" id="add">Add Row</button>
   </div>
 </header>
@@ -194,7 +195,7 @@ tr.flashrow{outline:2px solid #7cc4ff;outline-offset:-2px}
     </tr></thead>
     <tbody id="body"></tbody>
   </table>
-  <div class="addbot"><button class="btn o-yellow" id="add2">Add Row</button></div>
+  <div class="addbot"><button class="btn o-yellow" id="undo2" disabled title="Undo the last rubric change">Undo</button><button class="btn o-yellow" id="add2">Add Row</button></div>
   <div class="empty" id="empty">Upload your task's Final Rubric CSV, Source Clips, and Final Edit with the buttons in the top right. Also helpful to copy paste the task's prompt into the prompt tab in the top left to verify rows.</div>
 </div>
 </div>
@@ -311,6 +312,7 @@ function toCSV(rows){
 }
 
 function load(text, name){
+  clearUndo();
   meta = { bom: text.charCodeAt(0) === 0xFEFF, eol: /\r\n/.test(text) ? "\r\n" : "\n", trail: /\n$/.test(text),
            all: /^\ufeff?"(?:[^"]|"")*"(?:,"(?:[^"]|"")*")*(?:\r?\n|$)/.test(text) };
   const rows = parseCSV(text);
@@ -381,7 +383,9 @@ function score(){
 
 $("body").addEventListener("input", e => {
   const a = e.target; if (a.tagName !== "TEXTAREA") return;
-  recs[+a.dataset.n].cells[ix[a.dataset.k]] = a.value;
+  const rec = recs[+a.dataset.n], ci = ix[a.dataset.k];
+  if (!a._undoOpen){ pushUndo({ type: "edit", rec, ci, before: rec.cells[ci] }); a._undoOpen = true; }   /* one undo step per cell edit */
+  rec.cells[ci] = a.value;
   fit(a); mark(a); dirty = true;
   if (a.dataset.k === "a1" || a.dataset.k === "a2") a.closest("tr").querySelectorAll('textarea[data-k="a1"], textarea[data-k="a2"]').forEach(fit);
   if (a.dataset.k === "w") score();
@@ -396,12 +400,14 @@ $("body").addEventListener("click", e => {
   if (b.classList.contains("del")){
     const id = cell(recs[n], "id").trim();
     if (!confirm("Delete row " + (id ? "with ID " + id : n + 1) + "?")) return;
+    pushUndo({ type: "del", rec: recs[n], index: n });
     recs.splice(n, 1); dirty = true; draw(); return;
   }
   if (b.classList.contains("view")){ viewTimestamp(recs[n]); return; }
-  const r = recs[n]; r.ev = r.ev === b.dataset.v ? "" : b.dataset.v;
+  const r = recs[n]; pushUndo({ type: "mark", rec: r, before: r.ev }); r.ev = r.ev === b.dataset.v ? "" : b.dataset.v;
   draw();
 });
+$("body").addEventListener("focusout", e => { if (e.target.tagName === "TEXTAREA") e.target._undoOpen = false; });
 
 function addRow(){
   if (!head.length){
@@ -413,7 +419,8 @@ function addRow(){
   const cells = head.map(() => "");
   if (ix.id >= 0) cells[ix.id] = String(nextId);
   if (ix.crit >= 0) cells[ix.crit] = "The video should ";
-  recs.push({ cells, orig: head.map(() => ""), ev: "" });
+  const rec = { cells, orig: head.map(() => ""), ev: "" };
+  recs.push(rec); pushUndo({ type: "add", rec });
   dirty = true; draw();
   const rows = document.querySelectorAll("#body tr"), last = rows[rows.length - 1];
   last.scrollIntoView({ block: "center" });
@@ -738,7 +745,7 @@ $("newTask").addEventListener("click", () => {
   $("finalStage").innerHTML = ""; $("finEmpty").hidden = false;
   /* notepads and verdict fields */
   ["notes", "notesGood", "notesBad", "notesPrompt", "vc"].forEach(id => { $(id).value = ""; });
-  tcReset();
+  tcReset(); clearUndo();
   ["ntip", "gtip", "btip", "vmsg"].forEach(id => { $(id).textContent = ""; });
   verdict = ""; syncOpts();
   note("");
@@ -886,6 +893,36 @@ $("tcBody").addEventListener("click", e => {
 $("notesPrompt").addEventListener("input", tcStaleCheck);
 $("body").addEventListener("input", tcStaleCheck);
 $("body").addEventListener("click", () => setTimeout(tcStaleCheck));
+
+/* ---------- Undo (rubric edits, Pass/Fail marks, added and deleted rows) ---------- */
+let undoStack = [];
+const UNDO_MAX = 300;
+function updUndo(){ ["undo", "undo2"].forEach(id => { $(id).disabled = !undoStack.length; }); }
+function pushUndo(step){ undoStack.push(step); if (undoStack.length > UNDO_MAX) undoStack.shift(); updUndo(); }
+function clearUndo(){ undoStack = []; updUndo(); }
+function flashRec(rec){
+  const tr = document.querySelectorAll("#body tr")[recs.indexOf(rec)]; if (!tr) return;
+  tr.scrollIntoView({ block: "center" });
+  tr.classList.add("flashrow"); setTimeout(() => tr.classList.remove("flashrow"), 1500);
+}
+function undo(){
+  const st = undoStack.pop(); if (!st){ updUndo(); return; }
+  if (st.type === "del"){
+    const id = st.rec.cells[ix.id] != null && ix.id >= 0 ? st.rec.cells[ix.id].trim() : "";
+    if (!confirm("Restore the deleted row" + (id ? " with ID " + id : "") + "?")){ undoStack.push(st); updUndo(); return; }
+    recs.splice(Math.min(st.index, recs.length), 0, st.rec);
+  } else if (st.type === "add"){
+    const i = recs.indexOf(st.rec); if (i >= 0) recs.splice(i, 1);
+  } else if (st.type === "edit"){
+    st.rec.cells[st.ci] = st.before;
+  } else if (st.type === "mark"){
+    st.rec.ev = st.before;
+  }
+  dirty = true; draw(); updUndo(); tcStaleCheck();
+  if (st.type !== "add") flashRec(st.rec);
+}
+$("undo").addEventListener("click", undo);
+$("undo2").addEventListener("click", undo);
 </script>
 </body>
 </html>
