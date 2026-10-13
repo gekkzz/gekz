@@ -98,7 +98,7 @@ td::before{display:none}
 .compact td::before{display:block;content:attr(data-label);font-size:11px;color:var(--mut);padding:0 6px 1px;white-space:nowrap}
 .compact td.id{order:1;width:64px}.compact td.w{order:2;width:76px}
 .compact td.c-ts{order:3;flex:0 1 auto}
-.compact tr.hasview td.c-view{display:block;order:4;margin-left:-2px;align-self:flex-end;padding-bottom:2px}
+.compact tr.hasview td.c-view{display:flex;align-items:center;gap:4px;order:4;margin-left:-2px;align-self:flex-end;padding-bottom:2px;position:relative}
 .compact td.crit{order:5;flex:1 1 100%}
 .compact td.c-a1{order:6;flex:0 1 auto}.compact td.c-a2{order:7;flex:0 1 auto}
 .compact td.c-ev{order:9;padding-top:6px}.compact td.c-ev::before,.compact td.act::before{display:none}
@@ -159,10 +159,7 @@ tr.flashrow{outline:2px solid #7cc4ff;outline-offset:-2px}
 .keys{display:flex;flex-wrap:wrap;gap:4px 18px;padding:8px 2px 0;font-size:12px;color:var(--mut);opacity:.75}
 .keys kbd{font:inherit;font-weight:600;padding:0 5px;border:1px solid var(--line);border-radius:4px}
 .tscopy,.tscopied{display:none}
-.compact td.c-ts{display:grid;grid-template-columns:minmax(0,auto) auto;justify-content:start;align-items:center;column-gap:2px;position:relative}
-.compact td.c-ts::before{grid-row:1;grid-column:1}
-.compact td.c-ts textarea{grid-row:2;grid-column:1}
-.compact tr.hasview .tscopy{all:unset;grid-row:2;grid-column:2;display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:6px;cursor:pointer;color:var(--mut)}
+.compact tr.hasview .tscopy{all:unset;display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:6px;cursor:pointer;color:var(--mut)}
 .compact tr.hasview .tscopy:hover{color:var(--fg);background:var(--btn)}
 .compact tr.hasview .tscopy:focus-visible{outline:2px solid var(--fg);outline-offset:1px}
 .tscopy svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
@@ -368,7 +365,7 @@ function draw(){
   $("body").innerHTML = recs.map((r, n) => {
     const t = k => `<textarea rows="1" spellcheck="false" placeholder="\u2014" data-n="${n}" data-k="${k}"${ix[k] < 0 ? " disabled" : ""}></textarea>`;
     return `<tr><td class="id" data-label="ID">${t("id")}</td><td class="c-a1" data-label="Attempt 1 timestamp">${t("a1")}</td><td class="c-a2" data-label="Attempt 2 timestamp">${t("a2")}</td>
-      <td class="crit" data-label="Proposed final criterion">${t("crit")}</td><td class="w" data-label="Weight">${t("w")}</td><td class="c-ts" data-label="Final timestamp">${t("ts")}<button class="tscopy" data-n="${n}" aria-label="Copy final timestamp" title="Copy timestamp"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h8"/></svg></button><span class="tscopied" aria-live="polite"></span></td><td class="c-view"><button class="view" data-n="${n}" aria-label="View this timestamp in Source Clips">View Timestamp</button></td>
+      <td class="crit" data-label="Proposed final criterion">${t("crit")}</td><td class="w" data-label="Weight">${t("w")}</td><td class="c-ts" data-label="Final timestamp">${t("ts")}</td><td class="c-view"><button class="view" data-n="${n}" aria-label="View this timestamp in Source Clips">View Timestamp</button><button class="tscopy" data-n="${n}" aria-label="Copy final timestamp" title="Copy timestamp"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h8"/></svg></button><span class="tscopied" aria-live="polite"></span></td>
       <td class="c-ev"><div class="ev"><button class="p${r.ev==="p"?" on":""}" data-n="${n}" data-v="p">Pass</button><button class="f${r.ev==="f"?" on":""}" data-n="${n}" data-v="f">Fail</button></div></td>
       <td class="act"><button class="del" data-n="${n}" aria-label="Delete row ${n + 1}">Delete</button></td></tr>`;
   }).join("");
