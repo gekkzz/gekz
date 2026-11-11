@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Rubric reviewer</title>
+<title>Rubric reviewer v2</title>
 <style>
 :root{--bg:#1b1d1f;--panel:#202326;--line:#2c2f33;--fg:#f1f2f3;--mut:#9aa0a6;--pass:#2f6b1f;--fail:#7a0f10;--btn:#2a2d31}
 @media (prefers-color-scheme:light){:root{--bg:#fafafa;--panel:#fff;--line:#dfe1e4;--fg:#1c1e21;--mut:#5f6368;--btn:#eceef0}}
@@ -164,6 +164,61 @@ tr.flashrow{outline:2px solid #7cc4ff;outline-offset:-2px}
 .compact tr.hasview .tscopy:focus-visible{outline:2px solid var(--fg);outline-offset:1px}
 .tscopy svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 .compact tr.hasview .tscopied{display:block;position:absolute;right:0;top:100%;font-size:12px;color:var(--mut);white-space:nowrap}
+
+/* ---------- v2: task sheet ---------- */
+.taskbar{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px;padding:10px 24px;border-bottom:1px solid var(--line);font-size:14px}
+.taskbar label{display:inline-flex;align-items:center;gap:8px;font-weight:600}
+.taskbar select{padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--fg);font:inherit;font-weight:400}
+.taskbar select#taskSel{min-width:260px}
+.taskbar .navb{padding:5px 11px}
+.tmeta{color:var(--mut)}
+.tscore{margin-left:auto;display:inline-flex;align-items:baseline;gap:8px}
+.tscore b{font-size:16px}
+.tscore .sheetsc{color:#d4a72c;font-size:12px}
+.megap{margin:10px 24px 0;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--panel);font-size:13px}
+.megap .mrow{display:grid;grid-template-columns:minmax(0,1fr) 160px 90px;gap:10px;align-items:center;padding:3px 0}
+.megap .mname{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.megap progress{width:100%;height:8px;accent-color:#388bfd}
+.megap .mst{color:var(--mut);text-align:right;font-variant-numeric:tabular-nums}
+.megap .mhead{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:6px;font-weight:600}
+.megap .err{color:#e5534b}
+td.kind{width:96px}
+.kindb{all:unset;cursor:pointer;font-size:12px;font-weight:600;padding:2px 8px;border-radius:999px;border:1px solid var(--line);white-space:nowrap}
+td.kind .kindb{margin-top:5px}
+.compact td.kind .kindb{margin-top:0}
+.kindb.I{color:#3fb950;border-color:#2e6b3a}
+.kindb.E{color:#f0883e;border-color:#7a4a22}
+.kindb:hover{filter:brightness(1.2)}
+.kindb:focus-visible{outline:2px solid var(--fg);outline-offset:2px}
+td.c-ts{min-width:220px;max-width:300px}
+td.c-why{min-width:240px;max-width:360px}
+td.c-why textarea{color:var(--mut)}
+td.w{width:70px}
+td.id{width:64px}
+.chips{display:none}
+.compact .chips{display:flex;flex-wrap:wrap;gap:4px 6px;padding:4px 6px 0;align-items:center}
+.chip{all:unset;cursor:pointer;font-size:12px;padding:1px 8px;border:1px solid #2c6ab8;border-radius:999px;color:var(--mut);white-space:nowrap;font-variant-numeric:tabular-nums}
+.chip:hover{border-color:#388bfd;color:var(--fg);background:var(--btn)}
+.chip:focus-visible{outline:2px solid var(--fg);outline-offset:2px}
+.chipcopy{all:unset;display:inline-flex;align-items:center;justify-content:center;width:24px;height:22px;border-radius:6px;cursor:pointer;color:var(--mut)}
+.chipcopy:hover{color:var(--fg);background:var(--btn)}
+.chipcopy svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.chipnote{font-size:12px;color:var(--mut)}
+/* split-view cards for the task rubric */
+.compact tr::after{display:none}
+.compact td.id{order:1;width:64px}
+.compact td.kind{order:2;width:auto;padding-top:20px}
+.compact td.kind::before{display:none}
+.compact td.w{order:3;width:70px}
+.compact td.crit{order:5;flex:1 1 100%}
+.compact td.c-ts{order:6;flex:1 1 100%;max-width:none}
+.compact td.c-ev{order:9;padding-top:6px}
+.compact td.act{order:10;margin-left:auto;text-align:right;padding-top:6px}
+.compact td.c-why{order:11;flex:1 1 100%;max-width:none}
+.compact td.c-why::before{display:none}
+.compact td.c-why textarea{font-size:13px}
+.stagehead{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px}
+.stagehead .vname{padding:0}
 </style>
 </head>
 <body>
@@ -172,37 +227,51 @@ tr.flashrow{outline:2px solid #7cc4ff;outline-offset:-2px}
     <button class="tab on" role="tab" aria-selected="true" data-tab="rubric">Rubric</button>
     <button class="tab" role="tab" aria-selected="false" data-tab="prompt">Prompt</button>
     <button class="tab" role="tab" aria-selected="false" data-tab="src" id="srcTab">Source Clips</button>
-    <button class="tab" role="tab" aria-selected="false" data-tab="final">Final Edit</button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="gold">Golden Edit</button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="gen">Generated Video</button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="multi">Multi-Take Moments</button>
     <button class="tab" role="tab" aria-selected="false" data-tab="verd">Verdict Disagreements</button>
     <button class="tab" role="tab" aria-selected="false" data-tab="good">Notes - Good</button>
     <button class="tab" role="tab" aria-selected="false" data-tab="bad">Notes - Bad</button>
   </nav>
-  <button class="btn newtask" id="newTask">New Task</button>
+  <button class="btn newtask" id="newTask">Start Over</button>
   <div class="bar">
+    <a class="meta" id="signout" href="/__logout" hidden>Sign out</a>
     <span id="file" class="meta">No file loaded</span>
     <label class="btn o-green" tabindex="0">Upload CSV<input id="up" type="file" accept=".csv,text/csv" hidden></label>
-    <label class="btn o-green" tabindex="0">Upload Source Clips<input id="upSrc" type="file" accept="video/*" multiple hidden></label>
-    <label class="btn o-green" tabindex="0">Upload Final Edit<input id="upFin" type="file" accept="video/*" hidden></label>
+    <label class="btn o-green" tabindex="0">Upload Source Clips<input id="upSrc" type="file" accept="video/*,.mov" multiple hidden></label>
+    <label class="btn o-green" tabindex="0">Upload Golden Edit<input id="upGold" type="file" accept="video/*,.mov" hidden></label>
+    <label class="btn o-green" tabindex="0">Upload Generated<input id="upGen" type="file" accept="video/*,.mov" hidden></label>
     <button class="btn o-blue" id="dl" disabled>Download CSV</button>
-    <button class="btn o-yellow" id="undo" disabled title="Undo the last rubric change">Undo</button>
-    <button class="btn o-yellow" id="add">Add Row</button>
+    <button class="btn o-yellow" id="undo" disabled title="Undo the last rubric change in this task">Undo</button>
+    <button class="btn o-yellow" id="add" disabled>Add Row</button>
   </div>
 </header>
+<div class="taskbar" id="taskbar" hidden>
+  <label>Task <select id="taskSel" aria-label="Task"></select></label>
+  <button class="btn navb" id="prevT" title="Previous task" aria-label="Previous task">&lsaquo;</button>
+  <button class="btn navb" id="nextT" title="Next task" aria-label="Next task">&rsaquo;</button>
+  <span class="tmeta" id="tpos"></span>
+  <label>Sort <select id="sortSel"><option value="id">By task ID</option><option value="sheet">Sheet order</option></select></label>
+  <span class="tmeta" id="tmeta"></span>
+  <span class="tscore">Score <b class="scoreV">&mdash;</b><span class="scsub subV"></span><span class="sheetsc" id="sheetSc"></span></span>
+  <button class="btn o-cyan" id="megaBtn" title="Download this task's videos from the MEGA links in the sheet">Load videos from MEGA</button>
+</div>
+<div id="megaPanel" class="megap" hidden></div>
 <div id="msg" class="msg" hidden></div>
 <section id="p-rubric">
 <div id="rubricBox">
-<div class="rhead"><span>Rubric</span><span>Response 1 evaluation <b class="scoreV">&mdash;</b> <span class="scsub subV"></span></span></div>
+<div class="rhead"><span>Rubric <span class="scsub" id="rheadTask"></span></span><span>Score <b class="scoreV">&mdash;</b> <span class="scsub subV"></span></span></div>
 <div class="wrap">
   <table id="tbl" hidden>
     <thead><tr>
-      <th>ID</th><th>Attempt 1<br>timestamp</th><th>Attempt 2<br>timestamp</th>
-      <th>Proposed final criterion</th><th>Proposed<br>final weight</th><th>Proposed final timestamp</th>
-      <th>Response 1 evaluation<div class="score scoreV">&mdash;</div><div class="scsub subV"></div></th><th></th>
+      <th>ID</th><th>Type</th><th>Weight</th><th>Criterion</th><th>Timestamps</th>
+      <th>Verdict<div class="score scoreV">&mdash;</div><div class="scsub subV"></div></th><th>Reason</th><th></th>
     </tr></thead>
     <tbody id="body"></tbody>
   </table>
-  <div class="addbot"><button class="btn o-yellow" id="undo2" disabled title="Undo the last rubric change">Undo</button><button class="btn o-yellow" id="add2">Add Row</button></div>
-  <div class="empty" id="empty">Upload your task's Final Rubric CSV, Source Clips, and Final Edit with the buttons in the top right. Also helpful to copy paste the task's prompt into the prompt tab in the top left to verify rows.</div>
+  <div class="addbot"><button class="btn o-yellow" id="undo2" disabled title="Undo the last rubric change in this task">Undo</button><button class="btn o-yellow" id="add2">Add Row</button></div>
+  <div class="empty" id="empty">Upload the task sheet CSV with the button in the top right. Pick a task from the Task menu, then load its videos from MEGA or upload them yourself.</div>
 </div>
 </div>
 </section>
@@ -213,7 +282,7 @@ tr.flashrow{outline:2px solid #7cc4ff;outline-offset:-2px}
       <div class="nhead top phead"><label for="notesPrompt">Prompt</label>
         <button class="btn o-cyan" id="tcRun">Test Against Rubric</button>
         <span class="nact"><button class="btn sq" id="pfsDown" aria-label="Decrease font size" title="Smaller text">&minus;</button><span class="tip" id="pfsVal" aria-live="polite">15px</span><button class="btn sq" id="pfsUp" aria-label="Increase font size" title="Larger text">+</button></span></div>
-      <textarea id="notesPrompt" class="notes solo" spellcheck="false" placeholder="Copy paste the task's prompt here to easily compare"></textarea>
+      <textarea id="notesPrompt" class="notes solo" spellcheck="false" placeholder="The task's prompt (column C) appears here"></textarea>
       <div id="tc" class="tc" hidden>
         <div class="tchead"><b>Rubric check</b><span class="nact"><span class="tip" id="tcTip" aria-live="polite"></span><button class="btn" id="tcCopy" hidden>Copy results</button><button class="btn" id="tcClose" aria-label="Close results">Close</button></span></div>
         <form id="tcPw" class="tcpw" hidden><label for="tcPwIn">Check password</label><input id="tcPwIn" type="password" autocomplete="current-password"><button class="btn o-cyan" type="submit">Run check</button></form>
@@ -228,16 +297,35 @@ tr.flashrow{outline:2px solid #7cc4ff;outline-offset:-2px}
   <div class="subtabs" id="clipTabs" role="tablist" aria-label="Source clips"></div>
   <div class="split">
     <div class="stage"><div id="clipStage"></div>
-    <div class="empty" id="srcEmpty">Upload source clips to watch them here. Each clip gets its own tab.</div></div>
+    <div class="empty" id="srcEmpty">No source clips for this task yet. Use Load videos from MEGA, or Upload Source Clips.</div></div>
     <div class="side" id="slotSrc"></div>
   </div>
 </section>
 
-<section id="p-final" hidden>
+<section id="p-gold" hidden>
   <div class="split">
-    <div class="stage"><div id="finalStage"></div>
-    <div class="empty" id="finEmpty">Upload the final edit to watch it here.</div></div>
-    <div class="side" id="slotFinal"></div>
+    <div class="stage"><div id="goldStage"></div>
+    <div class="empty" id="goldEmpty">No golden edit for this task yet. Use Load videos from MEGA, or Upload Golden Edit.</div></div>
+    <div class="side" id="slotGold"></div>
+  </div>
+</section>
+
+<section id="p-gen" hidden>
+  <div class="split">
+    <div class="stage"><div id="genStage"></div>
+    <div class="empty" id="genEmpty">No generated video for this task yet. Use Load videos from MEGA, or Upload Generated.</div></div>
+    <div class="side" id="slotGen"></div>
+  </div>
+</section>
+
+<section id="p-multi" hidden>
+  <div class="split">
+    <div class="stage">
+      <div class="nhead top"><label for="notesMulti">Multi-Take Moments</label>
+        <span class="nact"><span class="tip" id="mtip" aria-live="polite"></span><button class="btn" id="mcopy">Copy to clipboard</button></span></div>
+      <textarea id="notesMulti" class="notes solo" spellcheck="false" placeholder="The task's multi-take moments (column G) appear here"></textarea>
+    </div>
+    <div class="side" id="slotMulti"></div>
   </div>
 </section>
 
@@ -266,7 +354,7 @@ tr.flashrow{outline:2px solid #7cc4ff;outline-offset:-2px}
     <div class="stage">
       <div class="nhead top"><label for="notesGood">Notes - Good</label>
         <span class="nact"><span class="tip" id="gtip" aria-live="polite"></span><button class="btn" id="gcopy">Copy to clipboard</button></span></div>
-      <textarea id="notesGood" class="notes solo" spellcheck="false" placeholder="Write what the model did well"></textarea>
+      <textarea id="notesGood" class="notes solo" spellcheck="false" placeholder="Write what the model did well (column S)"></textarea>
     </div>
     <div class="side" id="slotGood"></div>
   </div>
@@ -277,20 +365,24 @@ tr.flashrow{outline:2px solid #7cc4ff;outline-offset:-2px}
     <div class="stage">
       <div class="nhead top"><label for="notesBad">Notes - Bad</label>
         <span class="nact"><span class="tip" id="btip" aria-live="polite"></span><button class="btn" id="bcopy">Copy to clipboard</button></span></div>
-      <textarea id="notesBad" class="notes solo" spellcheck="false" placeholder="Write what the model could have done better"></textarea>
+      <textarea id="notesBad" class="notes solo" spellcheck="false" placeholder="Write what the model could have done better (column T)"></textarea>
     </div>
     <div class="side" id="slotBad"></div>
   </div>
 </section>
 
 <script>
-const COLS = [["id","ID"],["a1","Attempt 1 timestamp"],["a2","Attempt 2 timestamp"],
-              ["crit","Proposed final criterion"],["w","Proposed final weight"],["ts","Proposed final timestamp"]];
-const EVAL = "Response 1 evaluation";
-let head = [], recs = [], ix = {}, evIx = -1, fname = "rubric.csv", dirty = false;
-
+/* =====================================================================
+   Rubric reviewer v2: task sheet mode
+   One CSV row = one task. The rubric is built from:
+     rubric_positive (I rows) + rubric_pass_fail_positive
+     rubric_negative (E rows) + rubric_pass_fail_negative
+   Download writes the same sheet back. Only cells you changed are rewritten;
+   everything else is copied byte for byte.
+   ===================================================================== */
 const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+const escA = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
 function parseCSV(text){
   if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
@@ -310,135 +402,339 @@ function parseCSV(text){
   if (f !== "" || row.length){ row.push(f); rows.push(row); }
   return rows;
 }
-
 let meta = { bom: false, eol: "\n", trail: true, all: false };   /* mirrors the uploaded file */
 function toCSV(rows){
   const q = s => (meta.all || /[",\r\n]/.test(s)) ? '"' + s.replace(/"/g,'""') + '"' : s;
   return (meta.bom ? "\ufeff" : "") + rows.map(r => r.map(q).join(",")).join(meta.eol) + (meta.trail ? meta.eol : "");
 }
 
+/* ---------- sheet columns (matched by header name) ---------- */
+const COL = { id: "task_id", prompt: "prompt", cat: "category", src: "input_files", multi: "multi_take_moments",
+  gold: "golden_edit_video", gen: "generated_video", model: "model", dur: "generated_duration_sec",
+  pos: "rubric_positive", pfp: "rubric_pass_fail_positive", neg: "rubric_negative", pfn: "rubric_pass_fail_negative",
+  score: "rubric_score", good: "what_did_well", bad: "what_was_wrong" };
+const NEEDED = ["id", "pos", "pfp", "neg", "pfn"];
+/* text columns that are edited in a notepad tab */
+const TEXTS = { prompt: "notesPrompt", multi: "notesMulti", good: "notesGood", bad: "notesBad" };
+
+let sheet = null;          /* { head, rows, ix, name } */
+let tasks = [];            /* one object per task row */
+let cur = null;            /* current task */
+let dirty = false;
+const NOTASK = newTaskState(null);   /* holds videos/notes before any CSV is loaded */
+
+function newTaskState(rowIndex){
+  return { n: rowIndex, id: "", rows: [], base: {}, extra: { I: [], E: [] }, text: {}, verdNotes: "",
+           undo: [], vids: { clips: [], active: null, gold: null, gen: null } };
+}
+const sc = (rowIndex, key) => { const i = sheet && sheet.ix[key]; return i >= 0 ? (sheet.rows[rowIndex][i] ?? "") : ""; };
+
+/* ---------- rubric lines ---------- */
+const ITEM = /^([IE]\d+)\.\s*\[W:\s*([^,\]]*?)\s*(?:,\s*T:\s*([^\]]*?))?\s*\]\s?([\s\S]*)$/;
+const VERD = /^([IE]\d+)\.\s*(Pass|Fail)\b(?:\s*-\s*)?([\s\S]*)$/i;
+
+function parseTask(rowIndex){
+  const t = newTaskState(rowIndex);
+  t.id = sc(rowIndex, "id").trim();
+  const verd = {};
+  ["I", "E"].forEach(k => {
+    const pfText = sc(rowIndex, k === "I" ? "pfp" : "pfn");
+    pfText.split("\n").forEach(line => {
+      if (!line.trim()) return;
+      const m = VERD.exec(line.trim());
+      if (m) verd[m[1]] = { ev: m[2].toLowerCase() === "pass" ? "p" : "f", why: m[3] };
+      else t.extra[k].push(line);
+    });
+  });
+  ["I", "E"].forEach(k => {
+    sc(rowIndex, k === "I" ? "pos" : "neg").split("\n").forEach(line => {
+      if (!line.trim()) return;
+      const m = ITEM.exec(line.trim());
+      const r = m ? { id: m[1], kind: m[1][0], w: m[2], ts: m[3] || "", crit: m[4] }
+                  : { id: "", kind: k, w: "", ts: "", crit: line, raw: true };
+      const v = verd[r.id]; if (v){ r.ev = v.ev; r.why = v.why; delete verd[r.id]; } else { r.ev = ""; r.why = ""; }
+      r.o = { id: r.id, kind: r.kind, w: r.w, ts: r.ts, crit: r.crit, ev: r.ev, why: r.why };
+      t.rows.push(r);
+    });
+  });
+  /* verdict lines whose ID has no criterion are kept and written back unchanged */
+  Object.keys(verd).forEach(id => { const k = id[0] === "E" ? "E" : "I"; t.extra[k].push(id + ". " + (verd[id].ev === "p" ? "Pass" : "Fail") + (verd[id].why ? " - " + verd[id].why : "")); });
+  t.base = serTask(t);
+  Object.keys(TEXTS).forEach(k => { t.text[k] = sc(rowIndex, k); });
+  return t;
+}
+
+function serItem(r){ return r.raw && !r.id ? r.crit : r.id + ". [W:" + r.w + (r.ts.trim() ? ", T:" + r.ts.trim() : "") + "] " + r.crit; }
+function serVerd(r){ const v = r.ev === "p" ? "Pass" : r.ev === "f" ? "Fail" : ""; return r.id + "." + (v ? " " + v : "") + (r.why ? " - " + r.why : ""); }
+function serTask(t){
+  const g = k => t.rows.filter(r => r.kind === k);
+  return { pos: g("I").map(serItem).join("\n"), neg: g("E").map(serItem).join("\n"),
+           pfp: g("I").filter(r => r.id).map(serVerd).concat(t.extra.I).join("\n"),
+           pfn: g("E").filter(r => r.id).map(serVerd).concat(t.extra.E).join("\n") };
+}
+function scoreOf(t){
+  let pass = 0, tot = 0, graded = 0;
+  t.rows.forEach(r => { const w = parseFloat(r.w) || 0; tot += w; if (r.ev){ graded++; if (r.ev === "p") pass += w; } });
+  return { pct: tot ? 100 * pass / tot : null, graded, total: t.rows.length };
+}
+
+/* ---------- load ---------- */
 function load(text, name){
-  clearUndo();
   meta = { bom: text.charCodeAt(0) === 0xFEFF, eol: /\r\n/.test(text) ? "\r\n" : "\n", trail: /\n$/.test(text),
            all: /^\ufeff?"(?:[^"]|"")*"(?:,"(?:[^"]|"")*")*(?:\r?\n|$)/.test(text) };
   const rows = parseCSV(text);
-  if (!rows.length){ return note("That file is empty."); }
-  head = rows[0].map(h => h.trim());
-  const low = head.map(h => h.toLowerCase());
-  ix = {}; const missing = [];
-  COLS.forEach(([k, label]) => { ix[k] = low.indexOf(label.toLowerCase()); if (ix[k] < 0) missing.push(label); });
-  evIx = low.indexOf(EVAL.toLowerCase());
-  recs = rows.slice(1).filter(r => r.some(c => c.trim() !== "")).map(r => {
-    const cells = head.map((_, i) => r[i] ?? "");
-    const v = evIx >= 0 ? cells[evIx].trim().toLowerCase() : "";
-    return { cells, orig: cells.slice(), ev: v === "pass" ? "p" : v === "fail" ? "f" : "" };
-  });
-  fname = name; dirty = false;
-  $("file").textContent = name + " (" + recs.length + " rows)";
-  $("dl").disabled = false;
-  $("tbl").hidden = false; $("empty").hidden = true;
-  note(missing.length ? "Columns not found in this file: " + missing.join(", ") + ". Their cells are left blank." : "");
-  draw();
+  if (!rows.length) return note("That file is empty.");
+  const head = rows[0], low = head.map(h => h.trim().toLowerCase());
+  const ix = {}; Object.keys(COL).forEach(k => { ix[k] = low.indexOf(COL[k]); });
+  const missing = NEEDED.filter(k => ix[k] < 0).map(k => COL[k]);
+  if (missing.length) return note("This doesn't look like a task sheet: missing column(s) " + missing.join(", ") + ".");
+  saveTexts();
+  if (cur) hideVids(cur);
+  const oldVids = {}; tasks.forEach(t => { oldVids[t.id] = t; });
+  sheet = { head, rows: rows.slice(1), ix, name };
+  tasks = sheet.rows.map((r, i) => (r[ix.id] || "").trim() ? parseTask(i) : null).filter(Boolean);
+  /* reloading a sheet keeps videos already loaded for tasks with the same ID */
+  tasks.forEach(t => { const o = oldVids[t.id]; if (o){ t.vids = o.vids; delete oldVids[t.id]; } });
+  Object.values(oldVids).forEach(clearVids);
+  /* videos and notes added before the sheet was loaded go to the first task */
+  const first = sortedTasks()[0] || null;
+  if (first && NOTASK.vids.clips.length + (NOTASK.vids.gold ? 1 : 0) + (NOTASK.vids.gen ? 1 : 0)) first.vids = NOTASK.vids;
+  NOTASK.vids = { clips: [], active: null, gold: null, gen: null };
+  dirty = false; cur = null;
+  $("dl").disabled = false; $("add").disabled = false;
+  $("taskbar").hidden = false; $("tbl").hidden = false; $("empty").hidden = true;
+  $("file").textContent = name + " (" + tasks.length + " tasks)";
+  fillTaskSel();
+  note("");
+  selectTask(first);
 }
 
+function sortedTasks(){
+  const mode = $("sortSel").value;
+  const list = tasks.slice();
+  if (mode === "id") list.sort((a, b) => a.id.toLowerCase() < b.id.toLowerCase() ? -1 : a.id.toLowerCase() > b.id.toLowerCase() ? 1 : 0);
+  return list;
+}
+function fillTaskSel(){
+  const list = sortedTasks();
+  $("taskSel").innerHTML = list.map(t => {
+    const cat = sc(t.n, "cat").trim();
+    return '<option value="' + escA(t.id) + '">' + esc(t.id) + (cat ? " \u2014 " + esc(cat) : "") + '</option>';
+  }).join("");
+  if (cur) $("taskSel").value = cur.id;
+  updNav();
+}
+function updNav(){
+  const list = sortedTasks(), i = cur ? list.indexOf(cur) : -1;
+  $("prevT").disabled = i <= 0; $("nextT").disabled = i < 0 || i >= list.length - 1;
+  $("tpos").textContent = i >= 0 ? (i + 1) + " of " + list.length : "";
+}
+
+/* ---------- switching tasks ---------- */
+function saveTexts(){
+  const t = cur || NOTASK;
+  Object.keys(TEXTS).forEach(k => { t.text[k] = $(TEXTS[k]).value; });
+  t.verdNotes = $("notes").value;
+}
+function loadTexts(){
+  const t = cur || NOTASK;
+  Object.keys(TEXTS).forEach(k => { $(TEXTS[k]).value = t.text[k] || ""; });
+  $("notes").value = t.verdNotes || "";
+}
+function selectTask(t){
+  if (t === cur && t) return;
+  stopHold();
+  saveTexts();
+  hideVids(cur || NOTASK);
+  cur = t;
+  loadTexts();
+  showVids(cur || NOTASK);
+  tcReset(); megaHide();
+  if (cur){
+    $("taskSel").value = cur.id;
+    const bits = [sc(cur.n, "cat"), sc(cur.n, "model"), sc(cur.n, "dur") ? sc(cur.n, "dur") + " s" : ""].map(s => s.trim()).filter(Boolean);
+    $("tmeta").textContent = bits.join(" \u00b7 ");
+    $("rheadTask").textContent = cur.id;
+  }
+  updNav(); draw(); updUndo();
+  Object.values(slots).forEach(el => { if (el !== slots.rubric) el.scrollTop = 0; });
+  if (curTab === "rubric") window.scrollTo(0, 0);
+}
+$("taskSel").addEventListener("change", () => selectTask(tasks.find(t => t.id === $("taskSel").value) || null));
+$("prevT").addEventListener("click", () => { const l = sortedTasks(), i = l.indexOf(cur); if (i > 0) selectTask(l[i - 1]); });
+$("nextT").addEventListener("click", () => { const l = sortedTasks(), i = l.indexOf(cur); if (i >= 0 && i < l.length - 1) selectTask(l[i + 1]); });
+$("sortSel").addEventListener("change", fillTaskSel);
+
 function note(t){ const m = $("msg"); m.textContent = t; m.hidden = !t; }
-const cell = (r, k) => ix[k] >= 0 ? r.cells[ix[k]] : "";
-/* split view: timestamp fields are only as wide as their text; Attempt 1 and 2 share one width */
+
+/* ---------- rubric table ---------- */
 const MEAS = (() => { try { return document.createElement("canvas").getContext("2d"); } catch (e) { return null; } })();
 function textW(a, str){
   try { if (MEAS){ MEAS.font = getComputedStyle(a).font; const w = MEAS.measureText(str).width; if (w) return w; } } catch (e) {}
   return str.length * 8.5;
 }
-function fitW(a){
-  const k = a.dataset.k; if (k !== "ts" && k !== "a1" && k !== "a2") return;
-  const tr = a.closest("tr"), box = document.getElementById("rubricBox");
-  const grp = k === "ts" ? [a] : [...tr.querySelectorAll('textarea[data-k="a1"], textarea[data-k="a2"]')];
-  if (!box || !box.classList.contains("compact")){ grp.forEach(x => { x.style.width = ""; }); return; }
-  const longest = Math.max(...grp.map(x => Math.max(...(x.value || "\u2014").split("\n").map(l => textW(x, l)))));
-  const w = Math.max(64, Math.ceil(longest) + 20) + "px";
-  grp.forEach(x => { x.style.width = w; });
+const fit = a => { a.style.height = "auto"; a.style.height = a.scrollHeight + 2 + "px"; };
+const rowOf = a => cur && cur.rows[+a.dataset.n];
+const mark = a => { const r = rowOf(a); if (r) a.classList.toggle("chg", r[a.dataset.k] !== r.o[a.dataset.k]); };
+const COPY_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h8"/></svg>';
+
+function chipsHTML(r, n){
+  const seen = new Set(), list = [];
+  (r.ts || "").split(";").map(s => s.trim()).filter(Boolean).forEach(s => { if (!seen.has(s) && parseTs(s)){ seen.add(s); list.push(s); } });
+  if (!list.length) return "";
+  return list.map(s => '<button class="chip" data-t="' + escA(s) + '" title="Show this moment in Source Clips">' + esc(s) + '</button>').join("")
+    + '<button class="chipcopy" data-n="' + n + '" aria-label="Copy timestamps" title="Copy all timestamps">' + COPY_SVG + '</button><span class="chipnote" aria-live="polite"></span>';
 }
-const fit = a => { fitW(a); a.style.height = "auto"; a.style.height = a.scrollHeight + 2 + "px"; };
-const mark = a => { const i = ix[a.dataset.k]; a.classList.toggle("chg", i >= 0 && a.value !== recs[+a.dataset.n].orig[i]); };
 
 function draw(){
-  $("body").innerHTML = recs.map((r, n) => {
-    const t = k => `<textarea rows="1" spellcheck="false" placeholder="\u2014" data-n="${n}" data-k="${k}"${ix[k] < 0 ? " disabled" : ""}></textarea>`;
-    return `<tr><td class="id" data-label="ID">${t("id")}</td><td class="c-a1" data-label="Attempt 1 timestamp">${t("a1")}</td><td class="c-a2" data-label="Attempt 2 timestamp">${t("a2")}</td>
-      <td class="crit" data-label="Proposed final criterion">${t("crit")}</td><td class="w" data-label="Weight">${t("w")}</td><td class="c-ts" data-label="Final timestamp">${t("ts")}</td><td class="c-view"><button class="view" data-n="${n}" aria-label="View this timestamp in Source Clips">View Timestamp</button><button class="tscopy" data-n="${n}" aria-label="Copy final timestamp" title="Copy timestamp"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h8"/></svg></button><span class="tscopied" aria-live="polite"></span></td>
+  const rows = cur ? cur.rows : [];
+  $("body").innerHTML = rows.map((r, n) => {
+    const t = (k, ph) => `<textarea rows="1" spellcheck="false" placeholder="${ph || "\u2014"}" data-n="${n}" data-k="${k}"></textarea>`;
+    return `<tr class="k${r.kind}"><td class="id" data-label="ID">${t("id")}</td>
+      <td class="kind" data-label="Type"><button class="kindb ${r.kind}" data-n="${n}" title="Switch between positive (I) and negative (E)">${r.kind === "E" ? "Negative" : "Positive"}</button></td>
+      <td class="w" data-label="Weight">${t("w")}</td>
+      <td class="crit" data-label="Criterion">${t("crit")}</td>
+      <td class="c-ts" data-label="Timestamps">${t("ts", "No timestamps")}<div class="chips">${chipsHTML(r, n)}</div></td>
       <td class="c-ev"><div class="ev"><button class="p${r.ev==="p"?" on":""}" data-n="${n}" data-v="p">Pass</button><button class="f${r.ev==="f"?" on":""}" data-n="${n}" data-v="f">Fail</button></div></td>
-      <td class="act"><button class="del" data-n="${n}" aria-label="Delete row ${n + 1}">Delete</button></td></tr>`;
+      <td class="c-why" data-label="Reason">${t("why", "Reason for the verdict")}</td>
+      <td class="act"><button class="del" data-n="${n}" aria-label="Delete row ${escA(r.id || n + 1)}">Delete</button></td></tr>`;
   }).join("");
-  document.querySelectorAll("#body textarea").forEach(a => { a.value = cell(recs[+a.dataset.n], a.dataset.k); fit(a); mark(a); });
-  document.querySelectorAll("#body .view").forEach(b => setView(b, recs[+b.dataset.n]));
-  if (head.length) $("file").textContent = fname + " (" + recs.length + " rows)";
+  document.querySelectorAll("#body textarea").forEach(a => { a.value = rowOf(a)[a.dataset.k] || ""; fit(a); mark(a); });
   score();
 }
 
 function score(){
-  let pass = 0, tot = 0, graded = 0;
-  recs.forEach(r => {
-    if (!r.ev) return;
-    const w = parseFloat(cell(r, "w")) || 0;
-    graded++; tot += w; if (r.ev === "p") pass += w;
-  });
-  const pct = tot ? Math.round(100 * pass / tot) + "%" : "\u2014";
+  if (!cur){ document.querySelectorAll(".scoreV").forEach(el => { el.textContent = "\u2014"; }); document.querySelectorAll(".subV").forEach(el => { el.textContent = ""; }); $("sheetSc").textContent = ""; return; }
+  const s = scoreOf(cur), pct = s.pct == null ? "\u2014" : s.pct.toFixed(2) + "%";
   document.querySelectorAll(".scoreV").forEach(el => { el.textContent = pct; });
-  document.querySelectorAll(".subV").forEach(el => { el.textContent = graded + " of " + recs.length + " graded"; });
+  document.querySelectorAll(".subV").forEach(el => { el.textContent = s.graded + " of " + s.total + " graded"; });
+  const sheetPct = sc(cur.n, "score").trim();
+  $("sheetSc").textContent = sheetPct && sheetPct !== pct ? "sheet says " + sheetPct : "";
+  $("sheetSc").title = sheetPct && sheetPct !== pct ? "The score in the sheet (column R) differs from the score worked out from the weights and verdicts." : "";
 }
 
 $("body").addEventListener("input", e => {
-  const a = e.target; if (a.tagName !== "TEXTAREA") return;
-  const rec = recs[+a.dataset.n], ci = ix[a.dataset.k];
-  if (!a._undoOpen){ pushUndo({ type: "edit", rec, ci, before: rec.cells[ci] }); a._undoOpen = true; }   /* one undo step per cell edit */
-  rec.cells[ci] = a.value;
+  const a = e.target; if (a.tagName !== "TEXTAREA" || !cur) return;
+  const r = rowOf(a), k = a.dataset.k;
+  if (!a._undoOpen){ pushUndo({ type: "edit", r, k, before: r[k] }); a._undoOpen = true; }   /* one undo step per field edit */
+  r[k] = a.value; if (k === "id") r.raw = false;
   fit(a); mark(a); dirty = true;
-  if (a.dataset.k === "a1" || a.dataset.k === "a2") a.closest("tr").querySelectorAll('textarea[data-k="a1"], textarea[data-k="a2"]').forEach(fit);
-  if (a.dataset.k === "w") score();
-  if (a.dataset.k === "ts") setView(a.closest("tr").querySelector(".view"), recs[+a.dataset.n]);
-});
-window.addEventListener("resize", () => document.querySelectorAll("#body textarea").forEach(fit));
-window.addEventListener("beforeunload", e => { if (dirty || ["notes", "notesGood", "notesBad", "notesPrompt"].some(id => $(id).value.trim())){ e.preventDefault(); e.returnValue = ""; } });
-
-$("body").addEventListener("click", e => {
-  const b = e.target.closest("button"); if (!b) return;
-  const n = +b.dataset.n;
-  if (b.classList.contains("del")){
-    const id = cell(recs[n], "id").trim();
-    if (!confirm("Delete row " + (id ? "with ID " + id : n + 1) + "?")) return;
-    pushUndo({ type: "del", rec: recs[n], index: n });
-    recs.splice(n, 1); dirty = true; draw(); return;
-  }
-  if (b.classList.contains("view")){ viewTimestamp(recs[n]); return; }
-  if (b.classList.contains("tscopy")){ copyText(cell(recs[n], "ts").trim(), b.nextElementSibling); return; }
-  const r = recs[n]; pushUndo({ type: "mark", rec: r, before: r.ev }); r.ev = r.ev === b.dataset.v ? "" : b.dataset.v;
-  draw();
+  if (k === "w") score();
+  if (k === "ts") a.parentElement.querySelector(".chips").innerHTML = chipsHTML(r, +a.dataset.n);
 });
 $("body").addEventListener("focusout", e => { if (e.target.tagName === "TEXTAREA") e.target._undoOpen = false; });
+window.addEventListener("resize", () => document.querySelectorAll("#body textarea").forEach(fit));
+window.addEventListener("beforeunload", e => { saveTexts(); if (dirty || textsChanged()){ e.preventDefault(); e.returnValue = ""; } });
+function textsChanged(){ return tasks.some(t => Object.keys(TEXTS).some(k => t.text[k] !== sc(t.n, k))); }
+
+$("body").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b || !cur) return;
+  const n = +b.dataset.n;
+  if (b.classList.contains("chip")){ viewSpec(b.dataset.t); return; }
+  if (b.classList.contains("chipcopy")){ copyText((cur.rows[n].ts || "").trim(), b.nextElementSibling); return; }
+  if (b.classList.contains("del")){
+    const r = cur.rows[n];
+    if (!confirm("Delete row " + (r.id || n + 1) + "?")) return;
+    pushUndo({ type: "del", r, index: n });
+    cur.rows.splice(n, 1); dirty = true; draw(); return;
+  }
+  if (b.classList.contains("kindb")){ switchKind(n); return; }
+  if (b.dataset.v){
+    const r = cur.rows[n]; if (r.ev === b.dataset.v) return;   /* every row keeps a verdict in the sheet */
+    pushUndo({ type: "mark", r, before: r.ev }); r.ev = b.dataset.v; dirty = true; draw();
+  }
+});
+
+const nextId = k => k + (cur.rows.reduce((m, r) => { const x = new RegExp("^" + k + "(\\d+)$").exec(r.id.trim()); return x ? Math.max(m, +x[1]) : m; }, 0) + 1);
+function insertAt(k){ let i = -1; cur.rows.forEach((r, j) => { if (r.kind === k) i = j; }); return i >= 0 ? i + 1 : (k === "I" ? 0 : cur.rows.length); }
+
+function switchKind(n){
+  const r = cur.rows[n], to = r.kind === "E" ? "I" : "E";
+  pushUndo({ type: "kind", r, index: n, before: { kind: r.kind, id: r.id } });
+  cur.rows.splice(n, 1);
+  r.kind = to; r.id = nextId(to); r.raw = false;
+  cur.rows.splice(insertAt(to), 0, r);
+  dirty = true; draw(); flashRow(r);
+}
 
 function addRow(){
-  if (!head.length){
-    head = COLS.map(c => c[1]); ix = {}; COLS.forEach(([k], i) => ix[k] = i); evIx = -1; fname = "rubric.csv";
-    $("dl").disabled = false; $("tbl").hidden = false; $("empty").hidden = true;
-  }
-  /* next ID = highest whole-number ID currently in the rubric + 1 (1 if none) */
-  const nextId = recs.reduce((m, r) => { const n = /^\s*(\d+)\s*$/.exec(cell(r, "id")); return n ? Math.max(m, +n[1]) : m; }, 0) + 1;
-  const cells = head.map(() => "");
-  if (ix.id >= 0) cells[ix.id] = String(nextId);
-  if (ix.crit >= 0) cells[ix.crit] = "The video should ";
-  const rec = { cells, orig: head.map(() => ""), ev: "" };
-  recs.push(rec); pushUndo({ type: "add", rec });
+  if (!cur) return;
+  const r = { id: nextId("I"), kind: "I", w: "1", ts: "", crit: "The video should ", ev: "", why: "" };
+  r.o = { id: "", kind: "I", w: "", ts: "", crit: "", ev: "", why: "" };
+  cur.rows.splice(insertAt("I"), 0, r); pushUndo({ type: "add", r });
   dirty = true; draw();
-  const rows = document.querySelectorAll("#body tr"), last = rows[rows.length - 1];
-  last.scrollIntoView({ block: "center" });
-  const f = last.querySelector('textarea[data-k="crit"]:not(:disabled)') || last.querySelector("textarea:not(:disabled)");
+  const tr = document.querySelectorAll("#body tr")[cur.rows.indexOf(r)];
+  tr.scrollIntoView({ block: "center" });
+  const f = tr.querySelector('textarea[data-k="crit"]');
   if (f){ f.focus(); f.setSelectionRange(f.value.length, f.value.length); }
 }
 $("add").addEventListener("click", addRow);
 $("add2").addEventListener("click", addRow);
 
+function flashRow(r){
+  const tr = document.querySelectorAll("#body tr")[cur.rows.indexOf(r)]; if (!tr) return;
+  tr.scrollIntoView({ block: "center" });
+  tr.classList.add("flashrow"); setTimeout(() => tr.classList.remove("flashrow"), 1500);
+}
+
+/* ---------- undo (per task) ---------- */
+const UNDO_MAX = 300;
+function updUndo(){ const has = !!(cur && cur.undo.length); ["undo", "undo2"].forEach(id => { $(id).disabled = !has; }); }
+function pushUndo(step){ cur.undo.push(step); if (cur.undo.length > UNDO_MAX) cur.undo.shift(); updUndo(); }
+function undo(){
+  if (!cur) return;
+  const st = cur.undo.pop(); if (!st){ updUndo(); return; }
+  if (st.type === "del"){
+    if (!confirm("Restore the deleted row " + (st.r.id || "") + "?")){ cur.undo.push(st); updUndo(); return; }
+    cur.rows.splice(Math.min(st.index, cur.rows.length), 0, st.r);
+  } else if (st.type === "add"){
+    const i = cur.rows.indexOf(st.r); if (i >= 0) cur.rows.splice(i, 1);
+  } else if (st.type === "edit"){
+    st.r[st.k] = st.before;
+  } else if (st.type === "mark"){
+    st.r.ev = st.before;
+  } else if (st.type === "kind"){
+    const i = cur.rows.indexOf(st.r); if (i >= 0) cur.rows.splice(i, 1);
+    st.r.kind = st.before.kind; st.r.id = st.before.id;
+    cur.rows.splice(Math.min(st.index, cur.rows.length), 0, st.r);
+  }
+  dirty = true; draw(); updUndo(); tcStaleCheck();
+  if (st.type !== "add") flashRow(st.r);
+}
+$("undo").addEventListener("click", undo);
+$("undo2").addEventListener("click", undo);
+
+/* ---------- download: the same sheet, only changed cells rewritten ---------- */
+function buildCSV(){
+  saveTexts();
+  const out = sheet.rows.map(r => r.slice());
+  const set = (rowIndex, key, val) => { const i = sheet.ix[key]; if (i < 0) return; while (out[rowIndex].length <= i) out[rowIndex].push(""); out[rowIndex][i] = val; };
+  const missingVerdicts = [];
+  tasks.forEach(t => {
+    const now = serTask(t);
+    let rubricChanged = false;
+    ["pos", "pfp", "neg", "pfn"].forEach(k => { if (now[k] !== t.base[k]){ set(t.n, k, now[k]); rubricChanged = true; } });
+    if (rubricChanged){
+      const s = scoreOf(t); if (s.pct != null) set(t.n, "score", s.pct.toFixed(2) + "%");
+    }
+    Object.keys(TEXTS).forEach(k => { if (t.text[k] !== sc(t.n, k)) set(t.n, k, t.text[k]); });
+    t.rows.forEach(r => { if (r.id && !r.ev) missingVerdicts.push(t.id + " " + r.id); });
+  });
+  return { csv: toCSV([sheet.head].concat(out)), missingVerdicts };
+}
+$("dl").addEventListener("click", () => {
+  if (!sheet) return;
+  const { csv, missingVerdicts } = buildCSV();
+  if (missingVerdicts.length && !confirm("These rows have no Pass/Fail yet: " + missingVerdicts.slice(0, 12).join(", ") + (missingVerdicts.length > 12 ? " and " + (missingVerdicts.length - 12) + " more" : "") + ". Download anyway?")) return;
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  a.download = sheet.name.replace(/\.csv$/i, "") + "-edited.csv";
+  a.click(); URL.revokeObjectURL(a.href); dirty = false;
+});
+
 $("up").addEventListener("change", e => {
   const f = e.target.files[0]; if (!f) return;
+  if (sheet && (dirty || textsChanged()) && !confirm("Load a new sheet? Changes you haven't downloaded will be lost.")){ e.target.value = ""; return; }
   const rd = new FileReader();
   rd.onload = () => load(rd.result, f.name);
   rd.readAsText(f);
@@ -448,22 +744,12 @@ document.querySelectorAll("label.btn").forEach(l => l.addEventListener("keydown"
   if (e.key === "Enter" || e.key === " "){ e.preventDefault(); l.querySelector("input").click(); }
 }));
 
-$("dl").addEventListener("click", () => {
-  const out = [head].concat(recs.filter(r => r.cells.some(c => c.trim() !== "")).map(r => r.cells));
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(new Blob([toCSV(out)], { type: "text/csv;charset=utf-8" }));
-  a.download = fname.replace(/\.csv$/i, "") + "-edited.csv";
-  a.click(); URL.revokeObjectURL(a.href); dirty = false;
-});
-
 /* ---------- tabs ---------- */
-const panes = { rubric: $("p-rubric"), prompt: $("p-prompt"), src: $("p-src"), final: $("p-final"), verd: $("p-verd"), good: $("p-good"), bad: $("p-bad") };
+const panes = { rubric: $("p-rubric"), prompt: $("p-prompt"), src: $("p-src"), gold: $("p-gold"), gen: $("p-gen"), multi: $("p-multi"), verd: $("p-verd"), good: $("p-good"), bad: $("p-bad") };
 let curTab = "rubric";
 const rubricBox = $("rubricBox");
-const slots = { rubric: $("p-rubric"), prompt: $("slotPrompt"), src: $("slotSrc"), final: $("slotFinal"), verd: $("slotVerd"), good: $("slotGood"), bad: $("slotBad") };
-/* Keep the rubric at the same place in the list when switching tabs. The rubric scrolls in the
-   window on the Rubric tab and inside its side panel elsewhere (different row heights), so the
-   position is remembered as "which row is at the top, and how far through it" rather than pixels. */
+const slots = { rubric: $("p-rubric"), prompt: $("slotPrompt"), src: $("slotSrc"), gold: $("slotGold"), gen: $("slotGen"), multi: $("slotMulti"), verd: $("slotVerd"), good: $("slotGood"), bad: $("slotBad") };
+/* keep the rubric at the same row when switching tabs (see the live app for the reasoning) */
 const winMode = t => t === "rubric" || window.innerWidth <= 960;
 const rowEls = () => [...document.querySelectorAll("#body tr")];
 function topLine(t){
@@ -488,7 +774,6 @@ function applyPos(p){
   if (winMode(curTab)) window.scrollTo(0, p.i === 0 && p.frac === 0 ? 0 : Math.max(0, window.scrollY + delta));
   else slots[curTab].scrollTop = Math.max(0, slots[curTab].scrollTop + delta);
 }
-
 function showTab(t){
   if (t === curTab) return;
   stopHold();
@@ -497,7 +782,6 @@ function showTab(t){
   document.querySelectorAll(".tab").forEach(b => { const on = b.dataset.tab === t; b.classList.toggle("on", on); b.setAttribute("aria-selected", on); });
   Object.keys(panes).forEach(k => { panes[k].hidden = k !== t; });
   players.forEach(p => p.pause());
-  /* one shared rubric element: moved, never copied, so every tab shows the same live data */
   slots[t].appendChild(rubricBox);
   rubricBox.classList.toggle("compact", t !== "rubric");
   document.querySelectorAll("#body textarea").forEach(fit);
@@ -515,16 +799,11 @@ const ICON = {
 const audio = { v: 1, m: false };
 const players = new Set();
 const syncAudio = () => players.forEach(p => p.syncAudio());
-
-/* mm:ss.mmm (always three millisecond digits) */
 function fmt(t){
-  /* truncate to whole milliseconds (never round up, so .9996 shows as .999 not the next second);
-     the 1e-6 only absorbs floating-point noise such as 65.00499999999999 */
   const ms = Math.floor(Math.max(0, isFinite(t) ? t : 0) * 1000 + 1e-6);
   const m = Math.floor(ms / 60000), s = Math.floor(ms % 60000 / 1000), r = ms % 1000;
   return String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0") + "." + String(r).padStart(3, "0");
 }
-
 async function copyText(text, tip){
   let ok = false;
   try { await navigator.clipboard.writeText(text); ok = true; }
@@ -533,10 +812,10 @@ async function copyText(text, tip){
     try { ok = document.execCommand("copy"); } catch (_) {}
     t.remove();
   }
+  if (!tip) return;
   tip.textContent = ok ? "Copied" : "Copy failed";
   clearTimeout(tip._t); tip._t = setTimeout(() => { tip.textContent = ""; }, 1300);
 }
-
 function makePlayer(host, url, name, copyPrefix = ""){
   host.innerHTML = `<div class="player"><video playsinline preload="metadata"></video>
     <div class="perr" hidden></div>
@@ -555,10 +834,10 @@ function makePlayer(host, url, name, copyPrefix = ""){
         tip = q(".tip"), mute = q(".mute"), vol = q(".vol"), err = q(".perr"),
         spdD = q(".spdd"), spdU = q(".spdu"), spd = q(".spd");
   let drag = false, raf = 0, rate = 1;
-  const SPD_MIN = 0.25, SPD_MAX = 3, SPD_STEP = 0.25;   /* playback speed range and step */
+  const SPD_MIN = 0.25, SPD_MAX = 3, SPD_STEP = 0.25;
   const setSpeed = r => {
     rate = Math.min(SPD_MAX, Math.max(SPD_MIN, Math.round(r * 100) / 100));
-    v.playbackRate = rate; spd.textContent = rate + "\u00d7";
+    v.playbackRate = rate; spd.textContent = rate + "×";
     spdD.disabled = rate <= SPD_MIN; spdU.disabled = rate >= SPD_MAX;
   };
   spdD.addEventListener("click", () => setSpeed(rate - SPD_STEP));
@@ -567,25 +846,32 @@ function makePlayer(host, url, name, copyPrefix = ""){
   const tipEl = document.createElement("div");
   tipEl.className = "seektip"; tipEl.hidden = true; document.body.appendChild(tipEl);
   v.src = url;
-
   const upd = () => { ts.textContent = fmt(v.currentTime); if (!drag) seek.value = v.currentTime; };
   const loop = () => { upd(); raf = requestAnimationFrame(loop); };
   const setIcon = playing => { pp.innerHTML = playing ? ICON.pause : ICON.play; pp.setAttribute("aria-label", playing ? "Pause" : "Play"); };
   const toggle = () => { if (v.paused){ const r = v.play(); if (r && r.catch) r.catch(() => {}); } else v.pause(); };
-
   v.addEventListener("play", () => { setIcon(true); cancelAnimationFrame(raf); loop(); });
   v.addEventListener("pause", () => { setIcon(false); cancelAnimationFrame(raf); upd(); });
-  v.addEventListener("loadedmetadata", () => { seek.max = v.duration; dur.textContent = "/ " + fmt(v.duration); upd(); });
+  v.addEventListener("loadedmetadata", () => {
+    seek.max = v.duration; dur.textContent = "/ " + fmt(v.duration); upd();
+    if (!v.videoWidth){ err.hidden = false; err.textContent = "No picture: " + name + " uses a video format this browser can't display (often ProRes from editing software, or HEVC). Audio and timestamps still work. Convert it to MP4 (H.264) to see the video."; }
+  });
   v.addEventListener("seeked", upd);
   v.addEventListener("timeupdate", () => { if (v.paused) upd(); });
-  v.addEventListener("error", () => { err.hidden = false; err.textContent = "This browser can't play " + name + ". Try an MP4 (H.264) or WebM version."; });
+  v.addEventListener("error", async () => {
+    err.hidden = false;
+    err.textContent = "This browser can't play " + name + ". It may use a format like ProRes or HEVC. Convert it to MP4 (H.264) or WebM.";
+    if (url.startsWith("/mega-stream/")){
+      try { const r = await fetch(url, { headers: { Range: "bytes=0-0" } }); if (!r.ok) err.textContent = "Couldn't stream " + name + " from MEGA: " + (await r.text()).slice(0, 200); } catch (_) {}
+    }
+  });
   pp.addEventListener("click", toggle);
   v.addEventListener("click", toggle);
   seek.addEventListener("pointerdown", () => { drag = true; });
   ["pointerup", "pointercancel", "change"].forEach(ev => seek.addEventListener(ev, () => { drag = false; }));
   seek.addEventListener("mousemove", e => {
     if (!(v.duration > 0) || !isFinite(v.duration)) return;
-    const r = seek.getBoundingClientRect(), th = 16;   /* allow for the slider thumb's inset */
+    const r = seek.getBoundingClientRect(), th = 16;
     const f = Math.min(1, Math.max(0, (e.clientX - r.left - th / 2) / Math.max(1, r.width - th)));
     tipEl.textContent = fmt(f * v.duration);
     tipEl.style.left = e.clientX + "px"; tipEl.style.top = (e.clientY - 14) + "px"; tipEl.hidden = false;
@@ -595,10 +881,9 @@ function makePlayer(host, url, name, copyPrefix = ""){
   ts.addEventListener("click", () => copyText((copyPrefix ? copyPrefix + " " : "") + ts.textContent, tip));
   mute.addEventListener("click", () => { audio.m = !audio.m; syncAudio(); });
   vol.addEventListener("input", () => { audio.v = +vol.value; audio.m = audio.v === 0; syncAudio(); });
-
   const api = {
     pause: () => v.pause(), toggle,
-    seekTo(t){   /* jump to t seconds and stay paused, waiting for the video's metadata if needed */
+    seekTo(t){
       const go = () => {
         v.pause();
         const end = isFinite(v.duration) ? v.duration : Infinity;
@@ -615,75 +900,83 @@ function makePlayer(host, url, name, copyPrefix = ""){
   return api;
 }
 
-/* copied timestamps always say "Clip X": "clip 2", "CLIP_2", "clip-2", "clip2" -> "Clip 2" */
 const clipLabel = n => n.replace(/^\s*clip[\s_\-.]*(\d+)/i, "Clip $1").replace(/^\s*clip\b/i, "Clip");
 const isVideo = f => /^video\//.test(f.type) || /\.(mp4|m4v|mov|webm|mkv|ogv)$/i.test(f.name);
 const stem = n => n.replace(/\.[^.]+$/, "");
 
-/* ---------- source clips ---------- */
-let clips = [], activeClip = null;
-
-function removeClip(i){
-  const c = clips[i]; c.player.destroy(); c.host.remove(); URL.revokeObjectURL(c.url);
-  clips.splice(i, 1);
-  if (activeClip === c) activeClip = clips[Math.min(i, clips.length - 1)] || null;
+/* ---------- videos, kept per task ---------- */
+const V = () => (cur || NOTASK).vids;
+const STAGE = { gold: "goldStage", gen: "genStage" }, EMPTY = { gold: "goldEmpty", gen: "genEmpty" };
+function hideVids(t){
+  const v = t.vids;
+  v.clips.forEach(c => { c.player.pause(); c.host.hidden = true; });
+  ["gold", "gen"].forEach(k => { if (v[k]){ v[k].player.pause(); v[k].host.hidden = true; } });
 }
-
+function showVids(t){
+  renderClips();
+  ["gold", "gen"].forEach(k => { const s = t.vids[k]; if (s) s.host.hidden = false; $(EMPTY[k]).hidden = !!s; });
+}
+function clearVids(t){
+  const v = t.vids;
+  v.clips.forEach(c => { c.player.destroy(); c.host.remove(); URL.revokeObjectURL(c.url); });
+  ["gold", "gen"].forEach(k => { if (v[k]){ v[k].player.destroy(); v[k].host.remove(); URL.revokeObjectURL(v[k].url); } });
+  t.vids = { clips: [], active: null, gold: null, gen: null };
+}
 function renderClips(){
-  $("clipTabs").innerHTML = clips.map((c, i) =>
-    `<span class="sub${c === activeClip ? " on" : ""}"><button class="subbtn" role="tab" aria-selected="${c === activeClip}" data-i="${i}" title="${esc(c.name)}">${esc(stem(c.name))}</button></span>`).join("");
-  clips.forEach(c => { const on = c === activeClip; c.host.hidden = !on; if (!on) c.player.pause(); });
-  $("clipTabs").hidden = !clips.length;
-  $("srcEmpty").hidden = clips.length > 0;
-  $("srcTab").textContent = clips.length ? "Source Clips (" + clips.length + ")" : "Source Clips";
+  const v = V();
+  $("clipTabs").innerHTML = v.clips.map((c, i) =>
+    `<span class="sub${c === v.active ? " on" : ""}"><button class="subbtn" role="tab" aria-selected="${c === v.active}" data-i="${i}" title="${escA(c.name)}">${esc(stem(c.name))}</button></span>`).join("");
+  v.clips.forEach(c => { const on = c === v.active; c.host.hidden = !on; if (!on) c.player.pause(); });
+  $("clipTabs").hidden = !v.clips.length;
+  $("srcEmpty").hidden = v.clips.length > 0;
+  $("srcTab").textContent = v.clips.length ? "Source Clips (" + v.clips.length + ")" : "Source Clips";
 }
-
 $("clipTabs").addEventListener("click", e => {
   const b = e.target.closest("button"); if (!b) return;
-  const i = +b.dataset.i;
-  activeClip = clips[i];
-  renderClips();
+  V().active = V().clips[+b.dataset.i]; renderClips();
 });
-
+function addClip(blob, name, t){
+  t = t || cur || NOTASK; const v = t.vids;
+  const old = v.clips.findIndex(c => c.name === name);
+  if (old >= 0){ const c = v.clips[old]; c.player.destroy(); c.host.remove(); if (c.url.startsWith("blob:")) URL.revokeObjectURL(c.url); v.clips.splice(old, 1); }
+  const url = typeof blob === "string" ? blob : URL.createObjectURL(blob), host = document.createElement("div");
+  host.hidden = true; $("clipStage").appendChild(host);
+  v.clips.push({ name, url, host, player: makePlayer(host, url, name, clipLabel(stem(name))) });
+  v.clips.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" }));
+  if (!v.active || !v.clips.includes(v.active)) v.active = v.clips[0] || null;
+  if (t === (cur || NOTASK)) renderClips(); else v.clips.forEach(c => { c.host.hidden = true; });
+}
+function setSingle(k, blob, name, t){
+  t = t || cur || NOTASK; const v = t.vids;
+  if (v[k]){ v[k].player.destroy(); v[k].host.remove(); URL.revokeObjectURL(v[k].url); }
+  const url = typeof blob === "string" ? blob : URL.createObjectURL(blob), host = document.createElement("div");
+  host.innerHTML = '<div class="vname"></div><div></div>'; host.firstChild.textContent = name;
+  $(STAGE[k]).appendChild(host);
+  v[k] = { name, url, host, player: makePlayer(host.lastChild, url, name) };
+  const mine = t === (cur || NOTASK);
+  host.hidden = !mine; if (mine) $(EMPTY[k]).hidden = true;
+}
 $("upSrc").addEventListener("change", e => {
   const files = [...e.target.files]; e.target.value = "";
   const vids = files.filter(isVideo), bad = files.filter(f => !isVideo(f));
-  vids.forEach(f => {
-    const old = clips.findIndex(c => c.name === f.name); if (old >= 0) removeClip(old);
-    const url = URL.createObjectURL(f), host = document.createElement("div");
-    host.hidden = true; $("clipStage").appendChild(host);
-    clips.push({ name: f.name, url, host, player: makePlayer(host, url, f.name, clipLabel(stem(f.name))) });
-  });
-  clips.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" }));
-  if (!activeClip || !clips.includes(activeClip)) activeClip = clips[0] || null;
-  renderClips();
+  vids.forEach(f => addClip(f, f.name));
   note(bad.length ? "Skipped " + bad.length + " file(s) that aren't videos: " + bad.map(f => f.name).join(", ") : "");
 });
-
-/* ---------- final edit ---------- */
-let finalPlayer = null, finalUrl = "";
-$("upFin").addEventListener("change", e => {
+[["upGold", "gold"], ["upGen", "gen"]].forEach(([id, k]) => $(id).addEventListener("change", e => {
   const f = e.target.files[0]; e.target.value = ""; if (!f) return;
   if (!isVideo(f)){ note(f.name + " isn't a video file."); return; }
-  if (finalPlayer) finalPlayer.destroy();
-  if (finalUrl) URL.revokeObjectURL(finalUrl);
-  finalUrl = URL.createObjectURL(f);
-  $("finalStage").innerHTML = '<div class="vname"></div><div></div>';
-  $("finalStage").firstChild.textContent = f.name;
-  finalPlayer = makePlayer($("finalStage").lastChild, finalUrl, f.name);
-  $("finEmpty").hidden = true; note("");
-});
+  setSingle(k, f, f.name); note("");
+}));
 
-/* keyboard: space = play/pause; A or Left = back, D or Right = forward; hold to keep scrubbing */
-const SKIP = 5, HOLD_DELAY = 350, HOLD_EVERY = 200;   /* seconds per jump, ms before scrubbing starts, ms between jumps */
+/* ---------- keyboard ---------- */
+const SKIP = 5, HOLD_DELAY = 350, HOLD_EVERY = 200;
 const KEYDIR = { a: -1, arrowleft: -1, d: 1, arrowright: 1 };
-const activePlayer = () => curTab === "src" ? (activeClip && activeClip.player) : curTab === "final" ? finalPlayer : null;
+const activePlayer = () => { const v = V(); return curTab === "src" ? (v.active && v.active.player) : (curTab === "gold" || curTab === "gen") ? (v[curTab] && v[curTab].player) : null; };
 const typing = el => !!el && (/^(TEXTAREA|SELECT)$/.test(el.tagName) || el.isContentEditable ||
-  (el.tagName === "INPUT" && !el.classList.contains("seek")));   /* the seek slider is ours, so it still skips */
+  (el.tagName === "INPUT" && !el.classList.contains("seek")));
 let hold = null;
 function stopHold(){ if (hold){ clearTimeout(hold.t1); clearInterval(hold.t2); hold = null; } }
 function stepBy(dir){ const p = activePlayer(); if (p) p.seekBy(dir * SKIP); else stopHold(); }
-
 document.addEventListener("keydown", e => {
   if (e.ctrlKey || e.metaKey || e.altKey || typing(e.target)) return;
   const p = activePlayer(); if (!p) return;
@@ -694,7 +987,7 @@ document.addEventListener("keydown", e => {
   const key = (e.key || "").toLowerCase(), dir = KEYDIR[key];
   if (!dir) return;
   e.preventDefault();
-  if (e.repeat) return;                 /* our own timer sets the scrub speed, not the OS key repeat */
+  if (e.repeat) return;
   stopHold(); stepBy(dir);
   const h = hold = { key };
   h.t1 = setTimeout(() => { h.t2 = setInterval(() => stepBy(dir), HOLD_EVERY); }, HOLD_DELAY);
@@ -702,21 +995,39 @@ document.addEventListener("keydown", e => {
 document.addEventListener("keyup", e => { if (hold && (e.key || "").toLowerCase() === hold.key) stopHold(); });
 window.addEventListener("blur", stopHold);
 
-/* ---------- verdict disagreements (separate from the CSV: never part of the download) ---------- */
-let verdict = "";
-function syncOpts(){
-  document.querySelectorAll(".opt").forEach(b => { const on = b.dataset.v === verdict; b.classList.toggle("on", on); b.setAttribute("aria-pressed", on); });
+/* ---------- timestamps -> Source Clips ---------- */
+function parseTs(txt){
+  const T = "((?:\\d+:)?\\d+:[0-5]\\d(?:\\.\\d{1,3})?)";
+  const m = new RegExp("^\\s*(.+?)\\s+" + T + "(?:\\s*(?:-|–|—|to)\\s*" + T + ")?\\s*$", "i").exec(txt || "");
+  if (!m || /\d+:\d{2}/.test(m[1])) return null;
+  const secs = t => t.split(":").reduce((a, x) => a * 60 + parseFloat(x), 0);
+  return { name: m[1].trim(), sec: secs(m[2]), range: !!m[3] };
 }
+const normName = s => s.toLowerCase().replace(/[^a-z0-9]/g, "").replace(/(\D)0+(\d)/g, "$1$2");   /* "Clip_01" == "Clip 1" */
+const findClip = name => V().clips.find(c => normName(stem(c.name)) === normName(name));
+function flash(t){ note(t); setTimeout(() => { if ($("msg").textContent === t) note(""); }, 6000); }
+function viewSpec(spec){
+  const p = parseTs(spec); if (!p) return;
+  const c = findClip(p.name);
+  if (!c){
+    flash(V().clips.length ? "No source clip matches \"" + p.name + "\". This task's clips: " + V().clips.map(x => stem(x.name)).join(", ") + "."
+                           : "This task has no source clips yet. Load them from MEGA or upload them, then try again.");
+    return;
+  }
+  showTab("src"); V().active = c; renderClips(); note("");
+  c.player.seekTo(p.sec);
+}
+
+/* ---------- notepads ---------- */
+let verdict = "";
+function syncOpts(){ document.querySelectorAll(".opt").forEach(b => { const on = b.dataset.v === verdict; b.classList.toggle("on", on); b.setAttribute("aria-pressed", on); }); }
 $("vopts").addEventListener("click", e => {
   const b = e.target.closest(".opt"); if (!b) return;
   verdict = verdict === b.dataset.v ? "" : b.dataset.v; syncOpts(); $("vmsg").textContent = "";
 });
 function addVerdict(){
   const c = $("vc").value.trim(), m = $("vmsg");
-  if (!c || !verdict){
-    m.textContent = !c && !verdict ? "Enter a criterion # and choose a verdict type." : !c ? "Enter a criterion #." : "Choose a verdict type.";
-    return;
-  }
+  if (!c || !verdict){ m.textContent = !c && !verdict ? "Enter a criterion # and choose a verdict type." : !c ? "Enter a criterion #." : "Choose a verdict type."; return; }
   m.textContent = "";
   const n = $("notes");
   n.value += (n.value && !/\n$/.test(n.value) ? "\n" : "") + c + " - " + verdict;
@@ -732,37 +1043,10 @@ function wireCopy(btn, area, tipId){
     copyText(t, tip);
   });
 }
-wireCopy("vcopy", "notes", "ntip"); wireCopy("gcopy", "notesGood", "gtip"); wireCopy("bcopy", "notesBad", "btip");
+wireCopy("vcopy", "notes", "ntip"); wireCopy("gcopy", "notesGood", "gtip"); wireCopy("bcopy", "notesBad", "btip"); wireCopy("mcopy", "notesMulti", "mtip");
+["notesPrompt", "notesMulti", "notesGood", "notesBad"].forEach(id => $(id).addEventListener("input", () => { saveTexts(); }));
 
-/* ---------- New Task: clear everything back to the empty starting view ---------- */
-$("newTask").addEventListener("click", () => {
-  if (!confirm("Start a new task? This removes the CSV, all videos and all notes. Download your CSV first if you still need it.")) return;
-  /* rubric / CSV */
-  head = []; recs = []; ix = {}; evIx = -1; fname = "rubric.csv"; dirty = false;
-  meta = { bom: false, eol: "\n", trail: true, all: false };
-  $("body").innerHTML = ""; $("tbl").hidden = true; $("empty").hidden = false; $("dl").disabled = true;
-  $("file").textContent = "No file loaded";
-  document.querySelectorAll(".scoreV").forEach(el => { el.textContent = "\u2014"; });
-  document.querySelectorAll(".subV").forEach(el => { el.textContent = ""; });
-  /* videos */
-  while (clips.length) removeClip(0);
-  activeClip = null; renderClips();
-  if (finalPlayer){ finalPlayer.destroy(); finalPlayer = null; }
-  if (finalUrl){ URL.revokeObjectURL(finalUrl); finalUrl = ""; }
-  $("finalStage").innerHTML = ""; $("finEmpty").hidden = false;
-  /* notepads and verdict fields */
-  ["notes", "notesGood", "notesBad", "notesPrompt", "vc"].forEach(id => { $(id).value = ""; });
-  tcReset(); clearUndo();
-  ["ntip", "gtip", "btip", "vmsg"].forEach(id => { $(id).textContent = ""; });
-  verdict = ""; syncOpts();
-  note("");
-  /* back to the first tab, scrolled to the top */
-  showTab("rubric");
-  Object.values(slots).forEach(el => { el.scrollTop = 0; });
-  window.scrollTo(0, 0);
-});
-
-/* ---------- Prompt notepad text size ---------- */
+/* Prompt text size */
 const PFS_MIN = 10, PFS_MAX = 40, PFS_STEP = 2;
 let pfs = 15;
 function setPFS(n){
@@ -774,44 +1058,196 @@ $("pfsDown").addEventListener("click", () => setPFS(pfs - PFS_STEP));
 $("pfsUp").addEventListener("click", () => setPFS(pfs + PFS_STEP));
 setPFS(pfs);
 
-/* ---------- View button: jump to "Clip N m:ss.mmm" in the Source Clips tab ---------- */
-/* Only a single clip + time qualifies. "global", "multiple (see criterion)" and ranges do not. */
-function parseTs(txt){
-  /* "Clip 1 0:47.833" or a range "Clip 1 0:32.854-2:21.480" (also en/em dash, "to"); a range uses its start time */
-  const T = "((?:\\d+:)?\\d+:[0-5]\\d(?:\\.\\d{1,3})?)";
-  const m = new RegExp("^\\s*(.+?)\\s+" + T + "(?:\\s*(?:-|\u2013|\u2014|to)\\s*" + T + ")?\\s*$", "i").exec(txt || "");
-  if (!m || /\d+:\d{2}/.test(m[1])) return null;
-  const secs = t => t.split(":").reduce((a, x) => a * 60 + parseFloat(x), 0);
-  return { name: m[1].trim(), sec: secs(m[2]), range: !!m[3] };
+/* ---------- Start Over ---------- */
+$("newTask").addEventListener("click", () => {
+  if (!confirm("Start over? This removes the sheet, every task's edits, all videos and all notes. Download your CSV first if you still need it.")) return;
+  tasks.forEach(clearVids); clearVids(NOTASK);
+  sheet = null; tasks = []; cur = null; dirty = false;
+  meta = { bom: false, eol: "\n", trail: true, all: false };
+  Object.values(TEXTS).concat(["notes", "vc"]).forEach(id => { $(id).value = ""; });
+  NOTASK.text = {}; NOTASK.verdNotes = "";
+  $("body").innerHTML = ""; $("tbl").hidden = true; $("empty").hidden = false;
+  $("dl").disabled = true; $("add").disabled = true; $("taskbar").hidden = true;
+  $("file").textContent = "No file loaded"; $("taskSel").innerHTML = ""; $("rheadTask").textContent = "";
+  tcReset(); megaHide(); score(); updUndo(); renderClips(); showVids(NOTASK);
+  ["ntip", "gtip", "btip", "mtip", "vmsg"].forEach(id => { $(id).textContent = ""; });
+  verdict = ""; syncOpts(); note("");
+  showTab("rubric");
+  Object.values(slots).forEach(el => { el.scrollTop = 0; });
+  window.scrollTo(0, 0);
+});
+
+if (/^https?:$/.test(location.protocol) && !/^(localhost|127\.0\.0\.1)$/.test(location.hostname)) $("signout").hidden = false;
+
+/* ---------- streaming service worker (only on a real web address, not a double-clicked file) ---------- */
+let swReady = null;
+if ("serviceWorker" in navigator && /^https?:$/.test(location.protocol)){
+  swReady = navigator.serviceWorker.register("/sw.js", { scope: "/" }).then(() => navigator.serviceWorker.ready).then(() =>
+    navigator.serviceWorker.controller ? true : new Promise(res => {
+      navigator.serviceWorker.addEventListener("controllerchange", () => res(true), { once: true });
+      setTimeout(() => res(!!navigator.serviceWorker.controller), 4000);
+    })).catch(() => false);
 }
-const parseSingleTs = parseTs;
-const normName = s => s.toLowerCase().replace(/[^a-z0-9]/g, "");
-const findClip = name => clips.find(c => normName(stem(c.name)) === normName(name));
-function setView(btn, r){
-  if (!btn) return;
-  const p = parseTs(cell(r, "ts"));
-  btn.closest("tr").classList.toggle("hasview", !!p);
-  btn.classList.toggle("rng", !!(p && p.range));
+const canStream = async () => !!(swReady && await swReady && navigator.serviceWorker.controller);
+
+/* ---------- Load videos from MEGA ----------
+   Uses the open-source megajs library in the browser. MEGA links carry their decryption key after "#",
+   so files are downloaded and decrypted on this computer; nothing passes through any other server.
+   Links in the sheet look like:
+     https://mega.nz/folder/ROOT#KEY/folder/SUB   (source clips folder)
+     https://mega.nz/folder/ROOT#KEY/file/NODE    (golden edit, generated video)
+   The shared root folder is loaded once, then each task's folder/files are found inside it by ID. */
+const MEGA_LIB = "https://cdn.jsdelivr.net/npm/megajs@1.3.10/dist/main.browser-umd.js";
+let megaLibP = null, megaRoots = {}, megaBusy = false, megaStreams = [];
+
+function megaLib(){
+  if (window.mega && window.mega.File) return Promise.resolve(window.mega);
+  if (!megaLibP) megaLibP = new Promise((res, rej) => {
+    const s = document.createElement("script"); s.src = MEGA_LIB; s.async = true;
+    s.onload = () => window.mega && window.mega.File ? res(window.mega) : rej(new Error("The MEGA library loaded but didn't start."));
+    s.onerror = () => { megaLibP = null; rej(new Error("Couldn't load the MEGA library (needs an internet connection).")); };
+    document.head.appendChild(s);
+  });
+  return megaLibP;
 }
-function flash(t){ note(t); setTimeout(() => { if ($("msg").textContent === t) note(""); }, 6000); }
-function viewTimestamp(r){
-  const p = parseSingleTs(cell(r, "ts")); if (!p) return;
-  const c = findClip(p.name);
-  if (!c){
-    flash(clips.length ? "No uploaded source clip matches \"" + p.name + "\". Uploaded clips: " + clips.map(x => stem(x.name)).join(", ") + "."
-                       : "Upload your source clips first, then press View again.");
+function parseMegaLink(url){
+  const m = /^https?:\/\/(?:www\.)?mega\.(?:nz|co\.nz)\/folder\/([^#\/?]+)#([^\/?]+)(?:\/(folder|file)\/([^\/?#\s]+))?/.exec((url || "").trim());
+  return m ? { root: m[1], key: m[2], type: m[3] || "folder", node: m[4] || null } : null;
+}
+async function megaRoot(link){
+  const k = link.root + "#" + link.key;
+  if (!megaRoots[k]){
+    const lib = await megaLib();
+    const f = lib.File.fromURL("https://mega.nz/folder/" + link.root + "#" + link.key);
+    megaRoots[k] = f.loadAttributes().then(() => f).catch(e => { delete megaRoots[k]; throw e; });
+  }
+  return megaRoots[k];
+}
+/* items inside a shared folder carry their ID as downloadId[1] (megajs doesn't set nodeId on them) */
+const megaHandle = n => n.nodeId || (Array.isArray(n.downloadId) ? n.downloadId[1] : n.downloadId);
+function megaFind(node, id){
+  if (!node) return null;
+  if (megaHandle(node) === id) return node;
+  for (const c of node.children || []){ const r = megaFind(c, id); if (r) return r; }
+  return null;
+}
+async function megaNode(url){
+  const link = parseMegaLink(url);
+  if (!link) throw new Error("Not a MEGA folder link: " + (url || "(empty)"));
+  const root = await megaRoot(link);
+  let node = link.node ? megaFind(root, link.node) : root;
+  if (!node && link.node){
+    /* fallback: ask MEGA for that item directly, using the library's own lookup */
+    const lib = await megaLib();
+    try { node = await lib.File.fromURL("https://mega.nz/folder/" + link.root + "#" + link.key + "/file/" + link.node).loadAttributes(); }
+    catch (e) { node = null; }
+  }
+  if (!node) throw new Error("Couldn't find item " + link.node + " inside the shared MEGA folder (" + countNodes(root) + " items found). The link may point to something that was moved or deleted.");
+  return node;
+}
+const countNodes = n => 1 + (n.children || []).reduce((s, c) => s + countNodes(c), 0);
+const mb = n => (n / 1048576).toFixed(n < 10485760 ? 1 : 0) + " MB";
+const vidType = name => /\.webm$/i.test(name) ? "video/webm" : "video/mp4";   /* Chrome sniffs .mov (QuickTime) content itself */
+
+function megaHide(){ $("megaPanel").hidden = true; $("megaPanel").innerHTML = ""; }
+function megaPanel(title, rows, err){
+  const p = $("megaPanel"); p.hidden = false;
+  p.innerHTML = '<div class="mhead"><span>' + esc(title) + '</span><span class="nact">'
+    + (megaBusy ? '<button class="btn" id="megaStop">Stop</button>' : '<button class="btn" id="megaClose">Close</button>') + '</span></div>'
+    + (err ? '<div class="err">' + esc(err) + '</div>' : '')
+    + rows.map((r, i) => '<div class="mrow"><span class="mname" title="' + escA(r.label) + '">' + esc(r.label) + '</span><progress id="mp' + i + '" max="1" value="' + (r.done ? 1 : 0) + '"></progress><span class="mst" id="ms' + i + '">' + esc(r.status || "") + '</span></div>').join("");
+  const s = $("megaStop"), c = $("megaClose");
+  if (s) s.onclick = () => { megaStreams.forEach(st => { try { st.destroy(); } catch (_) {} }); megaStreams = []; megaBusy = false; };
+  if (c) c.onclick = megaHide;
+}
+function megaDownload(file, onProgress){
+  return new Promise((res, rej) => {
+    let st; try { st = file.download(); } catch (e) { rej(e); return; }
+    megaStreams.push(st);
+    const parts = []; let got = 0;
+    st.on("data", d => { parts.push(d); got += d.length; onProgress(got, file.size || 0); });
+    st.on("error", e => rej(e));
+    st.on("end", () => res(new Blob(parts, { type: vidType(file.name || "") })));
+    st.on("close", () => { if (!megaBusy) rej(new Error("Stopped")); });
+  });
+}
+
+$("megaBtn").addEventListener("click", async () => {
+  if (!cur || megaBusy) return;
+  const t = cur;
+  const want = [["src", "Source clips"], ["gold", "Golden edit"], ["gen", "Generated video"]].filter(([k]) => sc(t.n, k).trim());
+  if (!want.length){ flash("This task has no MEGA links in its source clips, golden edit or generated video columns."); return; }
+  megaBusy = true; megaPanel("Finding this task's videos on MEGA…", []);
+  let items = [];
+  try {
+    for (const [k, label] of want){
+      const node = await megaNode(sc(t.n, k));
+      if (k === "src"){
+        const files = node.directory ? (node.children || []).filter(f => !f.directory && /\.(mov|mp4|m4v|webm|mkv)$/i.test(f.name || "")) : [node];
+        files.sort((a, b) => (a.name || "").localeCompare(b.name || "", undefined, { numeric: true, sensitivity: "base" }));
+        if (!files.length) throw new Error("The source clips folder has no video files.");
+        files.forEach(f => items.push({ k, f, label: "Source: " + f.name }));
+      } else items.push({ k, f: node, label: label + ": " + node.name });
+    }
+  } catch (e) {
+    megaBusy = false; megaPanel("Couldn't read this task's MEGA links", [], megaErr(e)); return;
+  }
+  const link0 = parseMegaLink(sc(t.n, want[0][0]));
+  if (await canStream()){
+    /* stream: the players start right away and only fetch what is watched */
+    const have = new Set(t.vids.clips.map(c => c.name).concat(["gold", "gen"].map(k => t.vids[k] && t.vids[k].name)).filter(Boolean));
+    const todo = items.filter(it => !have.has(it.f.name));
+    todo.forEach(it => {
+      const url = "/mega-stream/" + [link0.root, link0.key, megaHandle(it.f), it.f.name].map(encodeURIComponent).join("/");
+      if (it.k === "src") addClip(url, it.f.name, t); else setSingle(it.k, url, it.f.name, t);
+    });
+    megaBusy = false;
+    megaPanel(todo.length ? "Streaming " + todo.length + " video(s) for task " + t.id + ". They play straight away; only what you watch is downloaded." : "All of this task's videos are already loaded.",
+              items.map(it => ({ label: it.label, status: have.has(it.f.name) ? "already loaded" : "streaming", done: true })));
     return;
   }
-  showTab("src"); activeClip = c; renderClips(); note("");
-  c.player.seekTo(p.sec);
+  /* skip videos already loaded for this task */
+  const have = new Set(t.vids.clips.map(c => c.name).concat(["gold", "gen"].map(k => t.vids[k] && t.vids[k].name)).filter(Boolean));
+  items = items.filter(it => !have.has(it.f.name));
+  if (!items.length){ megaBusy = false; megaPanel("All of this task's videos are already loaded.", []); return; }
+  const total = items.reduce((s, it) => s + (it.f.size || 0), 0);
+  megaBusy = false; megaPanel("Ready", items.map(it => ({ label: it.label, status: mb(it.f.size || 0) })));
+  if (!confirm("Download " + items.length + " video file(s) for task " + t.id + " from MEGA (" + mb(total) + ")?\n\nLarge downloads can take a while, and MEGA limits how much can be downloaded without an account.")){ megaHide(); return; }
+  megaBusy = true; megaStreams = [];
+  const rows = items.map(it => ({ label: it.label, status: "waiting" }));
+  megaPanel("Downloading for task " + t.id + "…", rows);
+  let failed = null, done = 0;
+  for (let i = 0; i < items.length && megaBusy; i++){
+    const it = items[i];
+    try {
+      const blob = await megaDownload(it.f, (got, size) => {
+        const p = $("mp" + i), s = $("ms" + i);
+        if (p) p.value = size ? got / size : 0; if (s) s.textContent = mb(got) + (size ? " / " + mb(size) : "");
+      });
+      if (it.k === "src") addClip(blob, it.f.name, t); else setSingle(it.k, blob, it.f.name, t);
+      rows[i].done = true; rows[i].status = "done"; done++;
+      const s = $("ms" + i); if (s) s.textContent = "done";
+    } catch (e) {
+      if (!megaBusy) break;
+      failed = megaErr(e); rows[i].status = "failed"; break;
+    }
+  }
+  const stopped = !megaBusy;
+  megaBusy = false; megaStreams = [];
+  megaPanel(stopped ? "Stopped. " + done + " of " + items.length + " downloaded." : failed ? "Stopped after an error. " + done + " of " + items.length + " downloaded." : "All " + done + " video(s) loaded for task " + t.id + ".", rows, failed);
+});
+function megaErr(e){
+  const m = String((e && e.message) || e || "Unknown error");
+  if (/bandwidth|quota|EOVERQUOTA|509|-17/i.test(m)) return "MEGA's download limit was reached (" + m + "). Wait a while and try again, or upload the videos yourself.";
+  if (/Failed to fetch|NetworkError|CORS/i.test(m)) return "Couldn't reach MEGA from this page (" + m + "). Check your connection, or upload the videos yourself.";
+  return m;
 }
 
 /* ---------- Test Against Rubric (Prompt tab) ----------
    Sends the prompt and each row's ID + proposed final criterion to /api/check (a Vercel function
    that calls Claude). Nothing else from the CSV is sent, and nothing is sent until the button is pressed. */
 let tcPass = "", tcBusy = false, tcLast = null, tcSig = "", tcCtl = null;
-const escA = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-const tcRows = () => recs.map((r, i) => ({ id: cell(r, "id").trim() || "#" + (i + 1), criterion: cell(r, "crit").trim() }));
+const tcRows = () => (cur ? cur.rows : []).map((r, i) => ({ id: (r.id || "").trim() || "#" + (i + 1), criterion: (r.crit || "").trim() }));
 const tcSignature = () => JSON.stringify([$("notesPrompt").value.trim(), tcRows()]);
 function tcShow(on){ $("tc").hidden = !on; $("notesPrompt").closest(".stage").classList.toggle("hastc", on); }
 function tcReset(){ if (tcCtl) tcCtl.abort(); tcLast = null; tcSig = ""; $("tcBody").innerHTML = ""; $("tcPw").hidden = true; $("tcCopy").hidden = true; tcShow(false); }
@@ -822,7 +1258,7 @@ function tcStart(){
   tcShow(true); $("tcCopy").hidden = true;
   if (location.protocol === "file:"){ tcMsg('<p class="err">The rubric check only works on your Vercel site, not when index.html is opened from your computer.</p>'); return; }
   if (!$("notesPrompt").value.trim()){ tcMsg('<p class="err">Paste the task\'s prompt into the notepad first.</p>'); return; }
-  if (!tcRows().some(r => r.criterion)){ tcMsg('<p class="err">Upload a rubric CSV with a "Proposed final criterion" column first.</p>'); return; }
+  if (!tcRows().some(r => r.criterion)){ tcMsg('<p class="err">Upload the task sheet and pick a task first.</p>'); return; }
   if (!tcPass){ $("tcPw").hidden = false; tcMsg(""); $("tcPwIn").focus(); return; }
   tcRun();
 }
@@ -891,7 +1327,7 @@ $("tcClose").addEventListener("click", () => { if (tcCtl) tcCtl.abort(); tcShow(
 $("tcCopy").addEventListener("click", () => { if (tcLast) copyText(tcText(), $("tcTip")); });
 $("tcBody").addEventListener("click", e => {
   const b = e.target.closest(".rid"); if (!b) return;
-  const i = recs.findIndex((r, k) => (cell(r, "id").trim() || "#" + (k + 1)) === b.dataset.rid);
+  const i = cur ? cur.rows.findIndex((r, k) => ((r.id || "").trim() || "#" + (k + 1)) === b.dataset.rid) : -1;
   const tr = document.querySelectorAll("#body tr")[i];
   if (!tr){ $("tcTip").textContent = "Row not found"; setTimeout(() => { $("tcTip").textContent = ""; }, 1500); return; }
   tr.scrollIntoView({ block: "center", behavior: "smooth" });
@@ -901,35 +1337,6 @@ $("notesPrompt").addEventListener("input", tcStaleCheck);
 $("body").addEventListener("input", tcStaleCheck);
 $("body").addEventListener("click", () => setTimeout(tcStaleCheck));
 
-/* ---------- Undo (rubric edits, Pass/Fail marks, added and deleted rows) ---------- */
-let undoStack = [];
-const UNDO_MAX = 300;
-function updUndo(){ ["undo", "undo2"].forEach(id => { $(id).disabled = !undoStack.length; }); }
-function pushUndo(step){ undoStack.push(step); if (undoStack.length > UNDO_MAX) undoStack.shift(); updUndo(); }
-function clearUndo(){ undoStack = []; updUndo(); }
-function flashRec(rec){
-  const tr = document.querySelectorAll("#body tr")[recs.indexOf(rec)]; if (!tr) return;
-  tr.scrollIntoView({ block: "center" });
-  tr.classList.add("flashrow"); setTimeout(() => tr.classList.remove("flashrow"), 1500);
-}
-function undo(){
-  const st = undoStack.pop(); if (!st){ updUndo(); return; }
-  if (st.type === "del"){
-    const id = st.rec.cells[ix.id] != null && ix.id >= 0 ? st.rec.cells[ix.id].trim() : "";
-    if (!confirm("Restore the deleted row" + (id ? " with ID " + id : "") + "?")){ undoStack.push(st); updUndo(); return; }
-    recs.splice(Math.min(st.index, recs.length), 0, st.rec);
-  } else if (st.type === "add"){
-    const i = recs.indexOf(st.rec); if (i >= 0) recs.splice(i, 1);
-  } else if (st.type === "edit"){
-    st.rec.cells[st.ci] = st.before;
-  } else if (st.type === "mark"){
-    st.rec.ev = st.before;
-  }
-  dirty = true; draw(); updUndo(); tcStaleCheck();
-  if (st.type !== "add") flashRec(st.rec);
-}
-$("undo").addEventListener("click", undo);
-$("undo2").addEventListener("click", undo);
 </script>
 </body>
 </html>
