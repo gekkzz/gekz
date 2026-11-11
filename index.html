@@ -106,17 +106,6 @@ td::before{display:none}
 .compact .empty{padding:32px 16px}
 #empty{max-width:560px;margin:0 auto;line-height:1.5}
 
-.vform{display:flex;flex-wrap:wrap;gap:10px 12px;align-items:center}
-.vlab{display:inline-flex;align-items:center;gap:8px;font-weight:600;font-size:14px}
-.vlab input{width:96px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--fg);font:inherit}
-.vlab input:focus{outline:none;border-color:var(--mut)}
-.vopts{display:flex;flex-wrap:wrap;gap:8px}
-.opt{all:unset;cursor:pointer;padding:8px 12px;border:1px solid var(--line);border-radius:8px;font-size:14px;line-height:1.3;color:var(--mut);max-width:260px}
-.opt:hover{border-color:var(--mut);color:var(--fg)}
-.opt.on{background:var(--btn);border-color:var(--fg);color:var(--fg)}
-.opt.on::before{content:"\2713\00a0"}
-.opt:focus-visible{outline:2px solid var(--fg);outline-offset:2px}
-.vmsg{min-height:20px;margin:8px 0 0;font-size:13px;color:#e5534b}
 .nhead{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:10px 0 8px;font-weight:600;font-size:14px}
 .nact{display:inline-flex;align-items:center;gap:10px}
 .notes{height:calc(100vh - 250px);min-height:260px;overflow:auto;resize:vertical;border-color:var(--line);background:var(--panel);padding:12px;line-height:1.5}
@@ -195,25 +184,25 @@ td.c-why{min-width:240px;max-width:360px}
 td.c-why textarea{color:var(--mut)}
 td.w{width:70px}
 td.id{width:64px}
-.chips{display:none}
-.compact .chips{display:flex;flex-wrap:wrap;gap:4px 6px;padding:4px 6px 0;align-items:center}
-.chip{all:unset;cursor:pointer;font-size:12px;padding:1px 8px;border:1px solid #2c6ab8;border-radius:999px;color:var(--mut);white-space:nowrap;font-variant-numeric:tabular-nums}
+.chips{display:flex;flex-wrap:wrap;gap:6px 6px;padding:5px 6px 0;align-items:center}
+.chips:empty{display:none}
+.chip{all:unset;cursor:pointer;font-size:13.5px;line-height:1.4;padding:3px 11px;border:1px solid #2c6ab8;border-radius:999px;color:var(--mut);white-space:nowrap;font-variant-numeric:tabular-nums}
 .chip:hover{border-color:#388bfd;color:var(--fg);background:var(--btn)}
 .chip:focus-visible{outline:2px solid var(--fg);outline-offset:2px}
-.chipcopy{all:unset;display:inline-flex;align-items:center;justify-content:center;width:24px;height:22px;border-radius:6px;cursor:pointer;color:var(--mut)}
+.chipcopy{all:unset;display:inline-flex;align-items:center;justify-content:center;width:28px;height:26px;border-radius:6px;cursor:pointer;color:var(--mut)}
 .chipcopy:hover{color:var(--fg);background:var(--btn)}
-.chipcopy svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.chipcopy svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 .chipnote{font-size:12px;color:var(--mut)}
 /* split-view cards for the task rubric */
 .compact tr::after{display:none}
 .compact td.id{order:1;width:64px}
-.compact td.kind{order:2;width:auto;padding-top:20px}
+.compact td.kind{order:2;width:auto;padding-top:20px;margin-right:18px}
 .compact td.kind::before{display:none}
 .compact td.w{order:3;width:70px}
-.compact td.crit{order:5;flex:1 1 100%}
-.compact td.c-ts{order:6;flex:1 1 100%;max-width:none}
-.compact td.c-ev{order:9;padding-top:6px}
-.compact td.act{order:10;margin-left:auto;text-align:right;padding-top:6px}
+.compact td.crit{order:6;flex:1 1 100%}
+.compact td.c-ts{order:7;flex:1 1 100%;max-width:none}
+.compact td.c-ev{order:4;align-self:flex-end;padding-bottom:1px;margin-left:10px}
+.compact td.act{order:5;margin-left:auto;text-align:right;align-self:flex-start}
 .compact td.c-why{order:11;flex:1 1 100%;max-width:none}
 .compact td.c-why::before{display:none}
 .compact td.c-why textarea{font-size:13px}
@@ -230,7 +219,6 @@ td.id{width:64px}
     <button class="tab" role="tab" aria-selected="false" data-tab="gold">Golden Edit</button>
     <button class="tab" role="tab" aria-selected="false" data-tab="gen">Generated Video</button>
     <button class="tab" role="tab" aria-selected="false" data-tab="multi">Multi-Take Moments</button>
-    <button class="tab" role="tab" aria-selected="false" data-tab="verd">Verdict Disagreements</button>
     <button class="tab" role="tab" aria-selected="false" data-tab="good">Notes - Good</button>
     <button class="tab" role="tab" aria-selected="false" data-tab="bad">Notes - Bad</button>
   </nav>
@@ -329,26 +317,6 @@ td.id{width:64px}
   </div>
 </section>
 
-<section id="p-verd" hidden>
-  <div class="split">
-    <div class="stage">
-      <div class="vform">
-        <label class="vlab">Criterion # <input id="vc" type="text" autocomplete="off" aria-label="Criterion number"></label>
-        <div class="vopts" id="vopts" role="group" aria-label="Verdict type">
-          <button type="button" class="opt" aria-pressed="false" data-v="Judge verdict was a pass, should have been a fail. ">Judge verdict was a pass, should have been a fail.</button>
-          <button type="button" class="opt" aria-pressed="false" data-v="Judge verdict was a fail, should have been a pass. ">Judge verdict was a fail, should have been a pass.</button>
-        </div>
-        <button class="btn" id="vadd">Add</button>
-      </div>
-      <div class="vmsg" id="vmsg" role="status"></div>
-      <div class="nhead"><label for="notes">Notepad</label>
-        <span class="nact"><span class="tip" id="ntip" aria-live="polite"></span><button class="btn" id="vcopy">Copy to clipboard</button></span></div>
-      <textarea id="notes" class="notes" spellcheck="false" placeholder="Type notes here, or fill in the fields above and press Add."></textarea>
-    </div>
-    <div class="side" id="slotVerd"></div>
-  </div>
-</section>
-
 <section id="p-good" hidden>
   <div class="split">
     <div class="stage">
@@ -424,7 +392,7 @@ let dirty = false;
 const NOTASK = newTaskState(null);   /* holds videos/notes before any CSV is loaded */
 
 function newTaskState(rowIndex){
-  return { n: rowIndex, id: "", rows: [], base: {}, extra: { I: [], E: [] }, text: {}, verdNotes: "",
+  return { n: rowIndex, id: "", rows: [], base: {}, extra: { I: [], E: [] }, text: {},
            undo: [], vids: { clips: [], active: null, gold: null, gen: null } };
 }
 const sc = (rowIndex, key) => { const i = sheet && sheet.ix[key]; return i >= 0 ? (sheet.rows[rowIndex][i] ?? "") : ""; };
@@ -534,12 +502,10 @@ function updNav(){
 function saveTexts(){
   const t = cur || NOTASK;
   Object.keys(TEXTS).forEach(k => { t.text[k] = $(TEXTS[k]).value; });
-  t.verdNotes = $("notes").value;
 }
 function loadTexts(){
   const t = cur || NOTASK;
   Object.keys(TEXTS).forEach(k => { $(TEXTS[k]).value = t.text[k] || ""; });
-  $("notes").value = t.verdNotes || "";
 }
 function selectTask(t){
   if (t === cur && t) return;
@@ -745,10 +711,10 @@ document.querySelectorAll("label.btn").forEach(l => l.addEventListener("keydown"
 }));
 
 /* ---------- tabs ---------- */
-const panes = { rubric: $("p-rubric"), prompt: $("p-prompt"), src: $("p-src"), gold: $("p-gold"), gen: $("p-gen"), multi: $("p-multi"), verd: $("p-verd"), good: $("p-good"), bad: $("p-bad") };
+const panes = { rubric: $("p-rubric"), prompt: $("p-prompt"), src: $("p-src"), gold: $("p-gold"), gen: $("p-gen"), multi: $("p-multi"), good: $("p-good"), bad: $("p-bad") };
 let curTab = "rubric";
 const rubricBox = $("rubricBox");
-const slots = { rubric: $("p-rubric"), prompt: $("slotPrompt"), src: $("slotSrc"), gold: $("slotGold"), gen: $("slotGen"), multi: $("slotMulti"), verd: $("slotVerd"), good: $("slotGood"), bad: $("slotBad") };
+const slots = { rubric: $("p-rubric"), prompt: $("slotPrompt"), src: $("slotSrc"), gold: $("slotGold"), gen: $("slotGen"), multi: $("slotMulti"), good: $("slotGood"), bad: $("slotBad") };
 /* keep the rubric at the same row when switching tabs (see the live app for the reasoning) */
 const winMode = t => t === "rubric" || window.innerWidth <= 960;
 const rowEls = () => [...document.querySelectorAll("#body tr")];
@@ -1019,23 +985,6 @@ function viewSpec(spec){
 }
 
 /* ---------- notepads ---------- */
-let verdict = "";
-function syncOpts(){ document.querySelectorAll(".opt").forEach(b => { const on = b.dataset.v === verdict; b.classList.toggle("on", on); b.setAttribute("aria-pressed", on); }); }
-$("vopts").addEventListener("click", e => {
-  const b = e.target.closest(".opt"); if (!b) return;
-  verdict = verdict === b.dataset.v ? "" : b.dataset.v; syncOpts(); $("vmsg").textContent = "";
-});
-function addVerdict(){
-  const c = $("vc").value.trim(), m = $("vmsg");
-  if (!c || !verdict){ m.textContent = !c && !verdict ? "Enter a criterion # and choose a verdict type." : !c ? "Enter a criterion #." : "Choose a verdict type."; return; }
-  m.textContent = "";
-  const n = $("notes");
-  n.value += (n.value && !/\n$/.test(n.value) ? "\n" : "") + c + " - " + verdict;
-  $("vc").value = "";
-  n.focus(); n.setSelectionRange(n.value.length, n.value.length); n.scrollTop = n.scrollHeight;
-}
-$("vadd").addEventListener("click", addVerdict);
-$("vc").addEventListener("keydown", e => { if (e.key === "Enter"){ e.preventDefault(); addVerdict(); } });
 function wireCopy(btn, area, tipId){
   $(btn).addEventListener("click", () => {
     const t = $(area).value.replace(/\s+$/, ""), tip = $(tipId);
@@ -1043,7 +992,7 @@ function wireCopy(btn, area, tipId){
     copyText(t, tip);
   });
 }
-wireCopy("vcopy", "notes", "ntip"); wireCopy("gcopy", "notesGood", "gtip"); wireCopy("bcopy", "notesBad", "btip"); wireCopy("mcopy", "notesMulti", "mtip");
+wireCopy("gcopy", "notesGood", "gtip"); wireCopy("bcopy", "notesBad", "btip"); wireCopy("mcopy", "notesMulti", "mtip");
 ["notesPrompt", "notesMulti", "notesGood", "notesBad"].forEach(id => $(id).addEventListener("input", () => { saveTexts(); }));
 
 /* Prompt text size */
@@ -1064,14 +1013,14 @@ $("newTask").addEventListener("click", () => {
   tasks.forEach(clearVids); clearVids(NOTASK);
   sheet = null; tasks = []; cur = null; dirty = false;
   meta = { bom: false, eol: "\n", trail: true, all: false };
-  Object.values(TEXTS).concat(["notes", "vc"]).forEach(id => { $(id).value = ""; });
-  NOTASK.text = {}; NOTASK.verdNotes = "";
+  Object.values(TEXTS).forEach(id => { $(id).value = ""; });
+  NOTASK.text = {};
   $("body").innerHTML = ""; $("tbl").hidden = true; $("empty").hidden = false;
   $("dl").disabled = true; $("add").disabled = true; $("taskbar").hidden = true;
   $("file").textContent = "No file loaded"; $("taskSel").innerHTML = ""; $("rheadTask").textContent = "";
   tcReset(); megaHide(); score(); updUndo(); renderClips(); showVids(NOTASK);
-  ["ntip", "gtip", "btip", "mtip", "vmsg"].forEach(id => { $(id).textContent = ""; });
-  verdict = ""; syncOpts(); note("");
+  ["gtip", "btip", "mtip"].forEach(id => { $(id).textContent = ""; });
+  note("");
   showTab("rubric");
   Object.values(slots).forEach(el => { el.scrollTop = 0; });
   window.scrollTo(0, 0);
