@@ -546,6 +546,7 @@ function selectTask(t){
     $("rheadTask").textContent = cur.id;
   }
   updNav(); draw(); updUndo(); setMegaBtn();
+  if (cur && cur.mega === "ready") warmTask(cur);
   Object.values(slots).forEach(el => { if (el !== slots.rubric) el.scrollTop = 0; });
   if (curTab === "rubric") window.scrollTo(0, 0);
 }
@@ -784,6 +785,7 @@ function showTab(t){
   rubricBox.classList.toggle("compact", t !== "rubric");
   document.querySelectorAll("#body textarea").forEach(fit);
   applyPos(pos);
+  updBuffering();
 }
 document.querySelector(".tabs").addEventListener("click", e => { const b = e.target.closest(".tab"); if (b) showTab(b.dataset.tab); });
 
@@ -882,6 +884,9 @@ function makePlayer(host, url, name, copyPrefix = ""){
   vol.addEventListener("input", () => { audio.v = +vol.value; audio.m = audio.v === 0; syncAudio(); });
   const api = {
     pause: () => v.pause(), toggle,
+    playing: () => !v.paused,
+    /* only the player on screen buffers ahead; the rest keep just their basic info */
+    setBuffer(on){ const want = on ? "auto" : "metadata"; if (v.preload !== want) v.preload = want; },
     seekTo(t){
       const go = () => {
         v.pause();
@@ -906,6 +911,10 @@ const stem = n => n.replace(/\.[^.]+$/, "");
 /* ---------- videos, kept per task ---------- */
 const V = () => (cur || NOTASK).vids;
 const STAGE = { gold: "goldStage", gen: "genStage" }, EMPTY = { gold: "goldEmpty", gen: "genEmpty" };
+function updBuffering(){
+  const on = activePlayer();
+  players.forEach(p => p.setBuffer(p === on));
+}
 function hideVids(t){
   const v = t.vids;
   v.clips.forEach(c => { c.player.pause(); c.host.hidden = true; });
@@ -929,6 +938,7 @@ function renderClips(){
   $("clipTabs").hidden = !v.clips.length;
   $("srcEmpty").hidden = v.clips.length > 0;
   $("srcTab").textContent = v.clips.length ? "Source Clips (" + v.clips.length + ")" : "Source Clips";
+  updBuffering();
 }
 $("clipTabs").addEventListener("click", e => {
   const b = e.target.closest("button"); if (!b) return;
@@ -954,6 +964,7 @@ function setSingle(k, blob, name, t){
   v[k] = { name, url, host, player: makePlayer(host.lastChild, url, name) };
   const mine = t === (cur || NOTASK);
   host.hidden = !mine; if (mine) $(EMPTY[k]).hidden = true;
+  updBuffering();
 }
 $("upSrc").addEventListener("change", e => {
   const files = [...e.target.files]; e.target.value = "";
@@ -1165,7 +1176,59 @@ async function megaLoad(opts = {}){
   t.mega = "loading"; setMegaBtn(); note("");
   let ok = false;
   try { ok = await megaLoadInner(opts); } finally { t.mega = ok ? "ready" : "idle"; if (t === cur) setMegaBtn(); }
+  if (ok) warmTask(t);
   return ok;
+}
+
+/* ---------- pre-load the few seconds around each rubric timestamp ----------
+   One hidden player visits each timestamp in turn, so the streaming worker fetches and keeps those
+   moments. It works on one moment at a time, waits whenever a video is playing, stops if you switch
+   tasks (and carries on when you come back), and only runs for streamed MEGA videos. */
+const WARM_SECONDS = 3, WARM_TIMEOUT = 10000;
+let warmV = null, warmJob = null;
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+function warmList(t){
+  const seen = new Set(), list = [];
+  t.rows.forEach(r => (r.ts || "").split(";").forEach(s => {
+    const p = parseTs(s.trim()); if (!p) return;
+    const c = t.vids.clips.find(x => normName(stem(x.name)) === normName(p.name));
+    if (!c || !c.url.startsWith("/mega-stream/")) return;
+    const k = c.name + "@" + Math.floor(p.sec);
+    if (!seen.has(k)){ seen.add(k); list.push({ c, sec: p.sec, k }); }
+  }));
+  return list.sort((a, b) => a.c.name.localeCompare(b.c.name, undefined, { numeric: true }) || a.sec - b.sec);
+}
+function warmTask(t){
+  if (warmJob && warmJob.t === t) return;
+  if (warmJob) warmJob.stop = true;
+  const job = warmJob = { t, stop: false };
+  t.warmDone = t.warmDone || new Set();
+  (async () => {
+    if (!warmV){ warmV = document.createElement("video"); warmV.muted = true; warmV.preload = "auto"; warmV.playsInline = true; warmV.setAttribute("aria-hidden", "true");
+      warmV.style.cssText = "position:fixed;left:-9999px;top:0;width:2px;height:2px;opacity:0;pointer-events:none"; document.body.appendChild(warmV); }
+    const busy = () => cur !== t || [...players].some(p => p.playing());
+    const list = warmList(t);
+    for (let n = 0; n < list.length && !job.stop; ){
+      const it = list[n];
+      if (t.warmDone.has(it.k)){ n++; continue; }
+      /* wait while anything is playing or another task is open */
+      while (!job.stop && busy()) await sleep(500);
+      if (job.stop) break;
+      if (warmV.getAttribute("src") !== it.c.url){ warmV.src = it.c.url; await new Promise(res => { warmV.addEventListener("loadedmetadata", res, { once: true }); warmV.addEventListener("error", res, { once: true }); setTimeout(res, WARM_TIMEOUT); }); }
+      if (warmV.error || !(warmV.duration > 0)){ n++; continue; }
+      warmV.currentTime = Math.min(it.sec, warmV.duration);
+      const t0 = Date.now(); let interrupted = false;
+      while (!job.stop && Date.now() - t0 < WARM_TIMEOUT){
+        if (busy()){ interrupted = true; break; }
+        const b = warmV.buffered; let ok = false;
+        for (let i = 0; i < b.length; i++) if (b.start(i) <= it.sec + 0.05 && b.end(i) >= Math.min(warmV.duration, it.sec + WARM_SECONDS)) ok = true;
+        if (ok){ t.warmDone.add(it.k); break; }
+        await sleep(150);
+      }
+      if (!interrupted) n++;            /* interrupted by playback or a task switch: try this moment again */
+    }
+    if (warmJob === job){ warmV.removeAttribute("src"); warmV.load(); warmJob = null; }
+  })();
 }
 async function megaLoadInner(opts){
   const t = cur;
