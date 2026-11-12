@@ -9,12 +9,15 @@
 @media (prefers-color-scheme:light){:root{--bg:#fafafa;--panel:#fff;--line:#dfe1e4;--fg:#1c1e21;--mut:#5f6368;--btn:#eceef0}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.35 system-ui,-apple-system,"Segoe UI",sans-serif}
-header{display:grid;grid-template-columns:minmax(0,1fr) max-content;gap:12px 24px;align-items:center;padding:16px 24px;border-bottom:1px solid var(--line)}
+header{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:12px 24px;align-items:center;padding:16px 24px;border-bottom:1px solid var(--line)}
 h1{margin:0;font-size:18px;font-weight:600}
 .bar{display:flex;flex-direction:column;gap:10px;align-items:flex-end}
-.barrow{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:flex-end}
-@media (max-width:1400px){header{grid-template-columns:minmax(0,1fr);justify-items:start}.bar{align-items:flex-start}.barrow{justify-content:flex-start}}
+.barrow{display:flex;flex-wrap:nowrap;max-width:100%;gap:10px;align-items:center;justify-content:flex-end}
+@media (max-width:1590px){header{grid-template-columns:minmax(0,1fr);justify-items:start}.barrow{flex-wrap:wrap}.bar{align-items:flex-start}.barrow{justify-content:flex-start}}
 .meta{color:var(--mut);font-size:13px}
+.fname{flex:0 1 auto;min-width:40px;max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.barrow > .btn,.barrow > a{flex:none}
+@media (max-width:1800px){.fname{display:none}}   /* too little room beside the tabs; the name is on Download CSV's tooltip */
 .btn{all:unset;cursor:pointer;padding:8px 14px;border:1px solid var(--line);border-radius:8px;background:var(--btn);font-weight:600;font-size:14px}
 .btn:hover{border-color:var(--mut)}
 .btn.o-green,.btn.o-blue,.btn.o-yellow{border-width:2px;padding:7px 13px}
@@ -250,14 +253,12 @@ td.id{width:64px}
   </nav>
   <div class="bar">
     <div class="barrow">
+    <span id="file" class="meta fname">No file loaded</span>
+    <a class="meta" id="signout" href="/__logout" hidden>Sign out</a>
     <label class="btn o-green" tabindex="0">Upload CSV<input id="up" type="file" accept=".csv,text/csv" hidden></label>
     <label class="btn o-green" tabindex="0">Upload Source Clips<input id="upSrc" type="file" accept="video/*,.mov" multiple hidden></label>
     <label class="btn o-green" tabindex="0">Upload Golden Edit<input id="upGold" type="file" accept="video/*,.mov" hidden></label>
     <label class="btn o-green" tabindex="0">Upload Generated<input id="upGen" type="file" accept="video/*,.mov" hidden></label>
-    </div>
-    <div class="barrow">
-    <a class="meta" id="signout" href="/__logout" hidden>Sign out</a>
-    <span id="file" class="meta">No file loaded</span>
     <button class="btn o-blue" id="dl" disabled>Download CSV</button>
     </div>
   </div>
@@ -523,7 +524,7 @@ function load(text, name){
   dirty = false; cur = null;
   $("dl").disabled = false; $("add").disabled = false;
   $("taskbar").hidden = false; $("tbl").hidden = false; $("empty").hidden = true;
-  $("file").textContent = name + " (" + tasks.length + " tasks)";
+  $("file").textContent = $("file").title = name; $("dl").title = "Download the edited copy of " + name;
   fillTaskSel();
   note("");
   selectTask(first);
