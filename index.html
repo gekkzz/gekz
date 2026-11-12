@@ -9,12 +9,10 @@
 @media (prefers-color-scheme:light){:root{--bg:#fafafa;--panel:#fff;--line:#dfe1e4;--fg:#1c1e21;--mut:#5f6368;--btn:#eceef0}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.35 system-ui,-apple-system,"Segoe UI",sans-serif}
-header{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:12px 16px;align-items:center;padding:16px 24px;border-bottom:1px solid var(--line)}
+header{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:12px 24px;align-items:center;padding:16px 24px;border-bottom:1px solid var(--line)}
 h1{margin:0;font-size:18px;font-weight:600}
 .bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:flex-end}
-.btn.newtask{border-color:#c0392b}
-.btn.newtask:hover{border-color:#e5534b;color:#e5534b}
-@media (max-width:1100px){header{grid-template-columns:minmax(0,1fr);justify-items:start}.bar{justify-content:flex-start}}
+@media (max-width:1500px){header{grid-template-columns:minmax(0,1fr);justify-items:start}.bar{justify-content:flex-start}}
 .meta{color:var(--mut);font-size:13px}
 .btn{all:unset;cursor:pointer;padding:8px 14px;border:1px solid var(--line);border-radius:8px;background:var(--btn);font-weight:600;font-size:14px}
 .btn:hover{border-color:var(--mut)}
@@ -54,6 +52,7 @@ td.id textarea{color:#d4a72c;font-weight:600}
 .empty{padding:64px 24px;text-align:center;color:var(--mut)}
 
 .tabs{display:flex;gap:4px;flex-wrap:wrap}
+.tabbreak{flex-basis:100%;height:0}
 .tab{all:unset;cursor:pointer;padding:8px 14px;border-radius:8px;font-weight:600;font-size:15px;color:var(--mut)}
 .tab:hover{color:var(--fg)}
 .tab.on{color:var(--fg);background:var(--btn)}
@@ -159,6 +158,8 @@ tr.flashrow{outline:2px solid #7cc4ff;outline-offset:-2px}
 .taskbar label{display:inline-flex;align-items:center;gap:8px;font-weight:600}
 .taskbar select{padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--fg);font:inherit;font-weight:400}
 .taskbar select#taskSel{min-width:260px}
+.taskbar input[type=search]{width:190px;padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--fg);font:inherit;font-weight:400}
+.taskbar input[type=search]:focus{outline:none;border-color:var(--mut)}
 .taskbar .navb{padding:5px 11px}
 .tmeta{color:var(--mut)}
 .tscore{margin-left:auto;display:inline-flex;align-items:baseline;gap:8px}
@@ -219,10 +220,10 @@ td.id{width:64px}
     <button class="tab" role="tab" aria-selected="false" data-tab="gold">Golden Edit</button>
     <button class="tab" role="tab" aria-selected="false" data-tab="gen">Generated Video</button>
     <button class="tab" role="tab" aria-selected="false" data-tab="multi">Multi-Take Moments</button>
-    <button class="tab" role="tab" aria-selected="false" data-tab="good">Notes - Good</button>
-    <button class="tab" role="tab" aria-selected="false" data-tab="bad">Notes - Bad</button>
+    <span class="tabbreak" aria-hidden="true"></span>
+    <button class="tab" role="tab" aria-selected="false" data-tab="good">What Went Well</button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="bad">What Went Wrong</button>
   </nav>
-  <button class="btn newtask" id="newTask">Start Over</button>
   <div class="bar">
     <a class="meta" id="signout" href="/__logout" hidden>Sign out</a>
     <span id="file" class="meta">No file loaded</span>
@@ -240,7 +241,8 @@ td.id{width:64px}
   <button class="btn navb" id="prevT" title="Previous task" aria-label="Previous task">&lsaquo;</button>
   <button class="btn navb" id="nextT" title="Next task" aria-label="Next task">&rsaquo;</button>
   <span class="tmeta" id="tpos"></span>
-  <label>Sort <select id="sortSel"><option value="id">By task ID</option><option value="sheet">Sheet order</option></select></label>
+  <label>Search <input id="taskSearch" type="search" placeholder="Task ID or category" autocomplete="off" spellcheck="false" aria-label="Search tasks"></label>
+  <span class="tmeta" id="tfound"></span>
   <span class="tmeta" id="tmeta"></span>
   <span class="tscore">Score <b class="scoreV">&mdash;</b><span class="scsub subV"></span><span class="sheetsc" id="sheetSc"></span></span>
   <button class="btn o-cyan" id="megaBtn" title="Download this task's videos from the MEGA links in the sheet">Load videos from MEGA</button>
@@ -320,7 +322,7 @@ td.id{width:64px}
 <section id="p-good" hidden>
   <div class="split">
     <div class="stage">
-      <div class="nhead top"><label for="notesGood">Notes - Good</label>
+      <div class="nhead top"><label for="notesGood">What Went Well</label>
         <span class="nact"><span class="tip" id="gtip" aria-live="polite"></span><button class="btn" id="gcopy">Copy to clipboard</button></span></div>
       <textarea id="notesGood" class="notes solo" spellcheck="false" placeholder="Write what the model did well (column S)"></textarea>
     </div>
@@ -331,7 +333,7 @@ td.id{width:64px}
 <section id="p-bad" hidden>
   <div class="split">
     <div class="stage">
-      <div class="nhead top"><label for="notesBad">Notes - Bad</label>
+      <div class="nhead top"><label for="notesBad">What Went Wrong</label>
         <span class="nact"><span class="tip" id="btip" aria-live="polite"></span><button class="btn" id="bcopy">Copy to clipboard</button></span></div>
       <textarea id="notesBad" class="notes solo" spellcheck="false" placeholder="Write what the model could have done better (column T)"></textarea>
     </div>
@@ -477,11 +479,10 @@ function load(text, name){
   selectTask(first);
 }
 
+/* tasks always in the sheet's own row order, narrowed by the Search box (matches task ID or category) */
 function sortedTasks(){
-  const mode = $("sortSel").value;
-  const list = tasks.slice();
-  if (mode === "id") list.sort((a, b) => a.id.toLowerCase() < b.id.toLowerCase() ? -1 : a.id.toLowerCase() > b.id.toLowerCase() ? 1 : 0);
-  return list;
+  const q = ($("taskSearch").value || "").trim().toLowerCase();
+  return tasks.filter(t => !q || t.id.toLowerCase().includes(q) || sc(t.n, "cat").toLowerCase().includes(q));
 }
 function fillTaskSel(){
   const list = sortedTasks();
@@ -489,7 +490,9 @@ function fillTaskSel(){
     const cat = sc(t.n, "cat").trim();
     return '<option value="' + escA(t.id) + '">' + esc(t.id) + (cat ? " \u2014 " + esc(cat) : "") + '</option>';
   }).join("");
-  if (cur) $("taskSel").value = cur.id;
+  if (cur && list.includes(cur)) $("taskSel").value = cur.id;
+  const q = $("taskSearch").value.trim();
+  $("tfound").textContent = q ? (list.length ? list.length + " match" + (list.length === 1 ? "" : "es") : "No matches") : "";
   updNav();
 }
 function updNav(){
@@ -529,7 +532,16 @@ function selectTask(t){
 $("taskSel").addEventListener("change", () => selectTask(tasks.find(t => t.id === $("taskSel").value) || null));
 $("prevT").addEventListener("click", () => { const l = sortedTasks(), i = l.indexOf(cur); if (i > 0) selectTask(l[i - 1]); });
 $("nextT").addEventListener("click", () => { const l = sortedTasks(), i = l.indexOf(cur); if (i >= 0 && i < l.length - 1) selectTask(l[i + 1]); });
-$("sortSel").addEventListener("change", fillTaskSel);
+/* typing in Search narrows the Task menu and opens the first match if the current task no longer fits */
+$("taskSearch").addEventListener("input", () => {
+  fillTaskSel();
+  const list = sortedTasks();
+  if (list.length && !list.includes(cur)) selectTask(list[0]);
+});
+$("taskSearch").addEventListener("keydown", e => {
+  if (e.key === "Enter"){ e.preventDefault(); const list = sortedTasks(); if (list.length) selectTask(list[0]); }
+  if (e.key === "Escape"){ $("taskSearch").value = ""; fillTaskSel(); }
+});
 
 function note(t){ const m = $("msg"); m.textContent = t; m.hidden = !t; }
 
@@ -765,10 +777,11 @@ const ICON = {
 const audio = { v: 1, m: false };
 const players = new Set();
 const syncAudio = () => players.forEach(p => p.syncAudio());
+/* mm:ss.hh: two decimals, matching the sheet's timestamps (truncated, so 0:05.999 shows as 00:05.99, never 00:06.00) */
 function fmt(t){
-  const ms = Math.floor(Math.max(0, isFinite(t) ? t : 0) * 1000 + 1e-6);
-  const m = Math.floor(ms / 60000), s = Math.floor(ms % 60000 / 1000), r = ms % 1000;
-  return String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0") + "." + String(r).padStart(3, "0");
+  const cs = Math.floor(Math.max(0, isFinite(t) ? t : 0) * 100 + 1e-6);
+  const m = Math.floor(cs / 6000), s = Math.floor(cs % 6000 / 100), r = cs % 100;
+  return String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0") + "." + String(r).padStart(2, "0");
 }
 async function copyText(text, tip){
   let ok = false;
@@ -788,8 +801,8 @@ function makePlayer(host, url, name, copyPrefix = ""){
     <div class="ctl">
       <button class="pp" aria-label="Play">${ICON.play}</button>
       <input class="seek" type="range" min="0" max="0" step="0.001" value="0" aria-label="Seek">
-      <button class="ts" title="Click to copy the time">00:00.000</button>
-      <span class="dur">/ 00:00.000</span><span class="tip" aria-live="polite"></span>
+      <button class="ts" title="Click to copy the time">00:00.00</button>
+      <span class="dur">/ 00:00.00</span><span class="tip" aria-live="polite"></span>
       <span class="spdgrp"><button class="spdd" aria-label="Slower" title="Slower">&minus;</button><button class="spd" aria-label="Playback speed (click to reset to 1x)" title="Click to reset to 1&times;">1&times;</button><button class="spdu" aria-label="Faster" title="Faster">+</button></span>
       <button class="mute" aria-label="Mute"></button>
       <input class="vol" type="range" min="0" max="1" step="0.01" aria-label="Volume">
@@ -1006,25 +1019,6 @@ function setPFS(n){
 $("pfsDown").addEventListener("click", () => setPFS(pfs - PFS_STEP));
 $("pfsUp").addEventListener("click", () => setPFS(pfs + PFS_STEP));
 setPFS(pfs);
-
-/* ---------- Start Over ---------- */
-$("newTask").addEventListener("click", () => {
-  if (!confirm("Start over? This removes the sheet, every task's edits, all videos and all notes. Download your CSV first if you still need it.")) return;
-  tasks.forEach(clearVids); clearVids(NOTASK);
-  sheet = null; tasks = []; cur = null; dirty = false;
-  meta = { bom: false, eol: "\n", trail: true, all: false };
-  Object.values(TEXTS).forEach(id => { $(id).value = ""; });
-  NOTASK.text = {};
-  $("body").innerHTML = ""; $("tbl").hidden = true; $("empty").hidden = false;
-  $("dl").disabled = true; $("add").disabled = true; $("taskbar").hidden = true;
-  $("file").textContent = "No file loaded"; $("taskSel").innerHTML = ""; $("rheadTask").textContent = "";
-  tcReset(); megaHide(); score(); updUndo(); renderClips(); showVids(NOTASK);
-  ["gtip", "btip", "mtip"].forEach(id => { $(id).textContent = ""; });
-  note("");
-  showTab("rubric");
-  Object.values(slots).forEach(el => { el.scrollTop = 0; });
-  window.scrollTo(0, 0);
-});
 
 if (/^https?:$/.test(location.protocol) && !/^(localhost|127\.0\.0\.1)$/.test(location.hostname)) $("signout").hidden = false;
 
