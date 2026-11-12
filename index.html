@@ -158,6 +158,8 @@ tr.flashrow{outline:2px solid #7cc4ff;outline-offset:-2px}
 .sbsnote{padding:48px 18px;text-align:center;color:var(--mut);border:1px dashed var(--line);border-radius:10px}
 .sbsnote[hidden]{display:none}
 @media (max-width:960px){.sbs{grid-template-columns:minmax(0,1fr)}}
+.vhost:not([hidden]){display:flex;flex-direction:column}
+.vhost .vname{order:2;text-align:right;padding:8px 2px 0}
 .saveind{opacity:.8}.saveind.err{color:#e5534b;opacity:1}
 
 .compact tr.hasview .tscopy{all:unset;display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:6px;cursor:pointer;color:var(--mut)}
@@ -999,7 +1001,7 @@ function setSingle(k, blob, name, t){
   t = t || cur || NOTASK; const v = t.vids;
   if (v[k]){ v[k].player.destroy(); v[k].host.remove(); URL.revokeObjectURL(v[k].url); }
   const url = typeof blob === "string" ? blob : URL.createObjectURL(blob), host = document.createElement("div");
-  host.innerHTML = '<div class="vname"></div><div></div>'; host.firstChild.textContent = name;
+  host.className = "vhost"; host.innerHTML = '<div class="vname"></div><div></div>'; host.firstChild.textContent = name;
   $(STAGE[k]).appendChild(host);
   v[k] = { name, url, host, player: makePlayer(host.lastChild, url, name) };
   const mine = t === (cur || NOTASK);
@@ -1448,12 +1450,12 @@ $("body").addEventListener("input", tcStaleCheck);
 $("body").addEventListener("click", () => setTimeout(tcStaleCheck));
 
 /* ---------- Side by Side: two halves, each showing the rubric, a source clip, the golden edit or the generated video ---------- */
-const SBS_ITEMS = [["rubric", "Rubric"], ["src", "Source Clips"], ["gold", "Golden Edit"], ["gen", "Generated Video"]];
+const SBS_ITEMS = [["src", "Source Clips"], ["gold", "Golden Edit"], ["gen", "Generated Video"], ["rubric", "Rubric"]];
 const SBS_EMPTY = { src: "No source clips for this task yet. Use Load videos from MEGA, or Upload Source Clips.",
   gold: "No golden edit for this task yet. Use Load videos from MEGA, or Upload Golden Edit.",
   gen: "No generated video for this task yet. Use Load videos from MEGA, or Upload Generated." };
-const SBS_STORE = "rr-sbs-layout";
-let halves = [{ sel: "gold", mode: "main", at: 1 }, { sel: "gen", mode: "main", at: 2 }];   /* first visit: golden left, generated right */
+const SBS_STORE = "rr-sbs-layout-v2";
+let halves = [{ sel: "gen", mode: "main", at: 1 }, { sel: "rubric", mode: "main", at: 2 }];   /* first visit: generated left, rubric right */
 try { const j = JSON.parse(localStorage.getItem(SBS_STORE) || "null");
   if (Array.isArray(j) && j.length === 2 && j.every(h => SBS_ITEMS.some(x => x[0] === h.sel))) halves = j.map((h, i) => ({ sel: h.sel, mode: h.sel === "src" && h.mode === "clips" ? "clips" : "main", at: +h.at || i + 1 })); } catch (_) {}
 let sbsFocus = 0, sbsClock = 3;
@@ -1503,7 +1505,7 @@ function sbsRender(pos){
     let msg = "";
     if (sbsOwner(s) !== h) msg = (s === "rubric" ? "The rubric" : s === "src" ? "The source clip" : s === "gold" ? "The golden edit" : "The generated video") + " is showing on the " + (h ? "left" : "right") + ".";
     else if (s === "rubric") rubricHalf = h;
-    else { const el = hostOf(v, s); if (el) want.set(el, h); else msg = SBS_EMPTY[s]; }
+    else { const el = hostOf(v, s); if (el) want.set(el, h); else msg = !sheet ? (sbsOwner("rubric") < 0 && h === 0 ? $("empty").textContent : "") : SBS_EMPTY[s]; }   /* before a CSV: the welcome text shows once */
     noteEl.textContent = msg; noteEl.hidden = !msg;
   });
   /* videos not shown in a half go back to their own tabs (moving a video pauses it, so only move what changes) */
@@ -1618,6 +1620,7 @@ $("restoreYes").addEventListener("click", () => { const d = $("restoreDlg"); d.c
 $("restoreNo").addEventListener("click", () => { const d = $("restoreDlg"); d.close(); lsDel(d._key); });
 $("restoreDlg").addEventListener("cancel", e => e.preventDefault());   /* Esc doesn't silently pick one */
 pruneSaves();
+showTab("sbs");      /* the app opens on Side by Side */
 
 </script>
 </body>
