@@ -9,7 +9,7 @@
 @media (prefers-color-scheme:light){:root{--bg:#fafafa;--panel:#fff;--line:#dfe1e4;--fg:#1c1e21;--mut:#5f6368;--btn:#eceef0}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.35 system-ui,-apple-system,"Segoe UI",sans-serif}
-header{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:12px 24px;align-items:center;padding:16px 24px;border-bottom:1px solid var(--line)}
+header{display:grid;grid-template-columns:minmax(0,1fr) max-content;gap:12px 24px;align-items:center;padding:16px 24px;border-bottom:1px solid var(--line)}
 h1{margin:0;font-size:18px;font-weight:600}
 .bar{display:flex;flex-direction:column;gap:10px;align-items:flex-end}
 .barrow{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:flex-end}
@@ -148,6 +148,18 @@ tr.flashrow{outline:2px solid #7cc4ff;outline-offset:-2px}
 .keys{display:flex;flex-wrap:wrap;gap:4px 18px;padding:8px 2px 0;font-size:12px;color:var(--mut);opacity:.75}
 .keys kbd{font:inherit;font-weight:600;padding:0 5px;border:1px solid var(--line);border-radius:4px}
 .tscopy,.tscopied{display:none}
+/* Side by Side */
+.sbs{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px;padding:16px 24px 20px;align-items:start}
+.sbshalf{min-width:0}
+.sbsbar{display:flex;gap:8px;flex-wrap:wrap;padding:0 0 12px}
+.sbsbar .sub.back{border-style:dashed}
+.sbsbody{min-width:0}
+.sbsbody.rub{position:sticky;top:12px;max-height:calc(100vh - 24px);overflow:auto;border:1px solid var(--line);border-radius:10px;background:var(--panel)}
+.sbsnote{padding:48px 18px;text-align:center;color:var(--mut);border:1px dashed var(--line);border-radius:10px}
+.sbsnote[hidden]{display:none}
+@media (max-width:960px){.sbs{grid-template-columns:minmax(0,1fr)}}
+.saveind{opacity:.8}.saveind.err{color:#e5534b;opacity:1}
+
 .compact tr.hasview .tscopy{all:unset;display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:6px;cursor:pointer;color:var(--mut)}
 .compact tr.hasview .tscopy:hover{color:var(--fg);background:var(--btn)}
 .compact tr.hasview .tscopy:focus-visible{outline:2px solid var(--fg);outline-offset:1px}
@@ -228,6 +240,7 @@ td.id{width:64px}
     <button class="tab" role="tab" aria-selected="false" data-tab="src" id="srcTab">Source Clips</button>
     <button class="tab" role="tab" aria-selected="false" data-tab="gold">Golden Edit</button>
     <button class="tab" role="tab" aria-selected="false" data-tab="gen">Generated Video</button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="sbs">Side by Side</button>
     <span class="tabbreak" aria-hidden="true"></span>
     <button class="tab" role="tab" aria-selected="false" data-tab="multi">Multi-Take Moments</button>
     <button class="tab" role="tab" aria-selected="false" data-tab="good">What Went Well</button>
@@ -255,6 +268,7 @@ td.id{width:64px}
   <label>Search <input id="taskSearch" type="search" placeholder="Task ID or category" autocomplete="off" spellcheck="false" aria-label="Search tasks"></label>
   <span class="tmeta" id="tfound"></span>
   <span class="tmeta" id="tmeta"></span>
+  <span class="tmeta saveind" id="saveInd" aria-live="polite"></span>
   <div class="tright">
   <span class="tscore">Score <b class="scoreV">&mdash;</b><span class="scsub subV"></span><span class="sheetsc" id="sheetSc"></span></span>
   <button class="btn o-cyan" id="megaBtn" title="Download this task's videos from the MEGA links in the sheet">Load videos from MEGA</button>
@@ -267,6 +281,11 @@ td.id{width:64px}
   <h2 id="askTitle">Load this task's videos?</h2>
   <p id="askTxt"></p>
   <div class="dlgact"><button class="btn" id="askClose" type="button">Close</button><button class="btn o-blue" id="askOk" type="button">Confirm</button></div>
+</dialog>
+<dialog id="restoreDlg" class="dlg" aria-labelledby="restoreTitle">
+  <h2 id="restoreTitle">Restore your unsaved edits?</h2>
+  <p id="restoreTxt"></p>
+  <div class="dlgact"><button class="btn" id="restoreNo" type="button">Discard</button><button class="btn o-blue" id="restoreYes" type="button">Restore</button></div>
 </dialog>
 <div id="msg" class="msg" hidden></div>
 <section id="p-rubric">
@@ -326,6 +345,14 @@ td.id{width:64px}
     <div class="empty" id="genEmpty">No generated video for this task yet. Use Load videos from MEGA, or Upload Generated.</div></div>
     <div class="side" id="slotGen"></div>
   </div>
+</section>
+
+<section id="p-sbs" hidden>
+  <div class="sbs">
+    <div class="sbshalf" data-h="0"><div class="sbsbar" id="sbsBar0" role="tablist" aria-label="Left side"></div><div class="sbsbody" id="sbsBody0"><div class="sbsnote" hidden></div></div></div>
+    <div class="sbshalf" data-h="1"><div class="sbsbar" id="sbsBar1" role="tablist" aria-label="Right side"></div><div class="sbsbody" id="sbsBody1"><div class="sbsnote" hidden></div></div></div>
+  </div>
+  <div id="rubricPark" hidden></div>
 </section>
 
 <section id="p-multi" hidden>
@@ -481,6 +508,7 @@ function load(text, name){
   saveTexts();
   if (cur) hideVids(cur);
   const oldVids = {}; tasks.forEach(t => { oldVids[t.id] = t; });
+  saveNow(); saveKey = null;
   sheet = { head, rows: rows.slice(1), ix, name };
   tasks = sheet.rows.map((r, i) => (r[ix.id] || "").trim() ? parseTask(i) : null).filter(Boolean);
   /* reloading a sheet keeps videos already loaded for tasks with the same ID */
@@ -497,6 +525,8 @@ function load(text, name){
   fillTaskSel();
   note("");
   selectTask(first);
+  saveKey = SAVE_PREFIX + hashText(text); $("saveInd").textContent = ""; $("saveInd").classList.remove("err");
+  offerRestore();
 }
 
 /* tasks always in the sheet's own row order, narrowed by the Search box (matches task ID or category) */
@@ -617,13 +647,13 @@ $("body").addEventListener("input", e => {
   const r = rowOf(a), k = a.dataset.k;
   if (!a._undoOpen){ pushUndo({ type: "edit", r, k, before: r[k] }); a._undoOpen = true; }   /* one undo step per field edit */
   r[k] = a.value; if (k === "id") r.raw = false;
-  fit(a); mark(a); dirty = true;
+  fit(a); mark(a); dirty = true; scheduleSave();
   if (k === "w") score();
   if (k === "ts") a.parentElement.querySelector(".chips").innerHTML = chipsHTML(r, +a.dataset.n);
 });
 $("body").addEventListener("focusout", e => { if (e.target.tagName === "TEXTAREA") e.target._undoOpen = false; });
 window.addEventListener("resize", () => document.querySelectorAll("#body textarea").forEach(fit));
-window.addEventListener("beforeunload", e => { saveTexts(); if (dirty || textsChanged()){ e.preventDefault(); e.returnValue = ""; } });
+window.addEventListener("beforeunload", () => { saveNow(); });   /* edits are autosaved in this browser, so no leave warning */
 function textsChanged(){ return tasks.some(t => Object.keys(TEXTS).some(k => t.text[k] !== sc(t.n, k))); }
 
 $("body").addEventListener("click", e => {
@@ -635,12 +665,12 @@ $("body").addEventListener("click", e => {
     const r = cur.rows[n];
     if (!confirm("Delete row " + (r.id || n + 1) + "?")) return;
     pushUndo({ type: "del", r, index: n });
-    cur.rows.splice(n, 1); dirty = true; draw(); return;
+    cur.rows.splice(n, 1); dirty = true; scheduleSave(); draw(); return;
   }
   if (b.classList.contains("kindb")){ switchKind(n); return; }
   if (b.dataset.v){
     const r = cur.rows[n]; if (r.ev === b.dataset.v) return;   /* every row keeps a verdict in the sheet */
-    pushUndo({ type: "mark", r, before: r.ev }); r.ev = b.dataset.v; dirty = true; draw();
+    pushUndo({ type: "mark", r, before: r.ev }); r.ev = b.dataset.v; dirty = true; scheduleSave(); draw();
   }
 });
 
@@ -653,7 +683,7 @@ function switchKind(n){
   cur.rows.splice(n, 1);
   r.kind = to; r.id = nextId(to); r.raw = false;
   cur.rows.splice(insertAt(to), 0, r);
-  dirty = true; draw(); flashRow(r);
+  dirty = true; scheduleSave(); draw(); flashRow(r);
 }
 
 function addRow(){
@@ -661,7 +691,7 @@ function addRow(){
   const r = { id: nextId("I"), kind: "I", w: "1", ts: "", crit: "The video should ", ev: "", why: "" };
   r.o = { id: "", kind: "I", w: "", ts: "", crit: "", ev: "", why: "" };
   cur.rows.splice(insertAt("I"), 0, r); pushUndo({ type: "add", r });
-  dirty = true; draw();
+  dirty = true; scheduleSave(); draw();
   const tr = document.querySelectorAll("#body tr")[cur.rows.indexOf(r)];
   tr.scrollIntoView({ block: "center" });
   const f = tr.querySelector('textarea[data-k="crit"]');
@@ -697,7 +727,7 @@ function undo(){
     st.r.kind = st.before.kind; st.r.id = st.before.id;
     cur.rows.splice(Math.min(st.index, cur.rows.length), 0, st.r);
   }
-  dirty = true; draw(); updUndo(); tcStaleCheck();
+  dirty = true; scheduleSave(); draw(); updUndo(); tcStaleCheck();
   if (st.type !== "add") flashRow(st.r);
 }
 $("undo").addEventListener("click", undo);
@@ -728,12 +758,12 @@ $("dl").addEventListener("click", () => {
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
   a.download = sheet.name.replace(/\.csv$/i, "") + "-edited.csv";
-  a.click(); URL.revokeObjectURL(a.href); dirty = false;
+  a.click(); URL.revokeObjectURL(a.href); dirty = false; clearSave();
 });
 
 $("up").addEventListener("change", e => {
   const f = e.target.files[0]; if (!f) return;
-  if (sheet && (dirty || textsChanged()) && !confirm("Load a new sheet? Changes you haven't downloaded will be lost.")){ e.target.value = ""; return; }
+  if (sheet) saveNow();
   const rd = new FileReader();
   rd.onload = () => load(rd.result, f.name);
   rd.readAsText(f);
@@ -744,10 +774,10 @@ document.querySelectorAll("label.btn").forEach(l => l.addEventListener("keydown"
 }));
 
 /* ---------- tabs ---------- */
-const panes = { rubric: $("p-rubric"), prompt: $("p-prompt"), src: $("p-src"), gold: $("p-gold"), gen: $("p-gen"), multi: $("p-multi"), good: $("p-good"), bad: $("p-bad") };
+const panes = { rubric: $("p-rubric"), prompt: $("p-prompt"), src: $("p-src"), gold: $("p-gold"), gen: $("p-gen"), multi: $("p-multi"), good: $("p-good"), bad: $("p-bad"), sbs: $("p-sbs") };
 let curTab = "rubric";
 const rubricBox = $("rubricBox");
-const slots = { rubric: $("p-rubric"), prompt: $("slotPrompt"), src: $("slotSrc"), gold: $("slotGold"), gen: $("slotGen"), multi: $("slotMulti"), good: $("slotGood"), bad: $("slotBad") };
+const slots = { rubric: $("p-rubric"), prompt: $("slotPrompt"), src: $("slotSrc"), gold: $("slotGold"), gen: $("slotGen"), multi: $("slotMulti"), good: $("slotGood"), bad: $("slotBad"), sbs: $("rubricPark") };
 /* keep the rubric at the same row when switching tabs (see the live app for the reasoning) */
 const winMode = t => t === "rubric" || window.innerWidth <= 960;
 const rowEls = () => [...document.querySelectorAll("#body tr")];
@@ -773,18 +803,26 @@ function applyPos(p){
   if (winMode(curTab)) window.scrollTo(0, p.i === 0 && p.frac === 0 ? 0 : Math.max(0, window.scrollY + delta));
   else slots[curTab].scrollTop = Math.max(0, slots[curTab].scrollTop + delta);
 }
+/* the rubric can be out of sight (Side by Side with no half on Rubric): remember where it was */
+let lastPos = null;
+const rubricShown = () => !!rubricBox.offsetParent;
+function readPos(){ if (rubricShown()) lastPos = getPos(); return lastPos; }
 function showTab(t){
   if (t === curTab) return;
   stopHold();
-  const pos = getPos();
+  const pos = readPos();
   curTab = t;
   document.querySelectorAll(".tab").forEach(b => { const on = b.dataset.tab === t; b.classList.toggle("on", on); b.setAttribute("aria-selected", on); });
   Object.keys(panes).forEach(k => { panes[k].hidden = k !== t; });
   players.forEach(p => p.pause());
-  slots[t].appendChild(rubricBox);
   rubricBox.classList.toggle("compact", t !== "rubric");
-  document.querySelectorAll("#body textarea").forEach(fit);
-  applyPos(pos);
+  if (t === "sbs") sbsRender(pos);
+  else {
+    placeVids();
+    slots[t].appendChild(rubricBox);
+    document.querySelectorAll("#body textarea").forEach(fit);
+    applyPos(pos);
+  }
   updBuffering();
 }
 document.querySelector(".tabs").addEventListener("click", e => { const b = e.target.closest(".tab"); if (b) showTab(b.dataset.tab); });
@@ -912,11 +950,12 @@ const stem = n => n.replace(/\.[^.]+$/, "");
 const V = () => (cur || NOTASK).vids;
 const STAGE = { gold: "goldStage", gen: "genStage" }, EMPTY = { gold: "goldEmpty", gen: "genEmpty" };
 function updBuffering(){
-  const on = activePlayer();
-  players.forEach(p => p.setBuffer(p === on));
+  const on = curTab === "sbs" ? sbsPlayers() : [activePlayer()];
+  players.forEach(p => p.setBuffer(on.includes(p)));
 }
 function hideVids(t){
   const v = t.vids;
+  sendHome(v);
   v.clips.forEach(c => { c.player.pause(); c.host.hidden = true; });
   ["gold", "gen"].forEach(k => { if (v[k]){ v[k].player.pause(); v[k].host.hidden = true; } });
 }
@@ -938,6 +977,7 @@ function renderClips(){
   $("clipTabs").hidden = !v.clips.length;
   $("srcEmpty").hidden = v.clips.length > 0;
   $("srcTab").textContent = v.clips.length ? "Source Clips (" + v.clips.length + ")" : "Source Clips";
+  placeVids();
   updBuffering();
 }
 $("clipTabs").addEventListener("click", e => {
@@ -964,6 +1004,7 @@ function setSingle(k, blob, name, t){
   v[k] = { name, url, host, player: makePlayer(host.lastChild, url, name) };
   const mine = t === (cur || NOTASK);
   host.hidden = !mine; if (mine) $(EMPTY[k]).hidden = true;
+  if (mine) placeVids();
   updBuffering();
 }
 $("upSrc").addEventListener("change", e => {
@@ -981,7 +1022,7 @@ $("upSrc").addEventListener("change", e => {
 /* ---------- keyboard ---------- */
 const SKIP = 5, HOLD_DELAY = 350, HOLD_EVERY = 200;
 const KEYDIR = { a: -1, arrowleft: -1, d: 1, arrowright: 1 };
-const activePlayer = () => { const v = V(); return curTab === "src" ? (v.active && v.active.player) : (curTab === "gold" || curTab === "gen") ? (v[curTab] && v[curTab].player) : null; };
+const activePlayer = () => { const v = V(); return curTab === "src" ? (v.active && v.active.player) : (curTab === "gold" || curTab === "gen") ? (v[curTab] && v[curTab].player) : curTab === "sbs" ? sbsFocusPlayer() : null; };
 const typing = el => !!el && (/^(TEXTAREA|SELECT)$/.test(el.tagName) || el.isContentEditable ||
   (el.tagName === "INPUT" && !el.classList.contains("seek")));
 let hold = null;
@@ -1025,7 +1066,11 @@ function viewSpec(spec){
                            : "This task has no source clips yet. Load them from MEGA or upload them, then try again.");
     return;
   }
-  showTab("src"); V().active = c; renderClips(); note("");
+  note("");
+  if (curTab === "sbs" && sbsOwner("rubric") >= 0){       /* keep the rubric where it is; open the clip in the other half */
+    const h = 1 - sbsOwner("rubric");
+    V().active = c; sbsPick(h, "src", true); renderClips();
+  } else { showTab("src"); V().active = c; renderClips(); }
   c.player.seekTo(p.sec);
 }
 
@@ -1059,7 +1104,7 @@ function wireCopy(btn, area, tipId){
   });
 }
 wireCopy("gcopy", "notesGood", "gtip"); wireCopy("bcopy", "notesBad", "btip"); wireCopy("mcopy", "notesMulti", "mtip");
-["notesPrompt", "notesMulti", "notesGood", "notesBad"].forEach(id => $(id).addEventListener("input", () => { saveTexts(); }));
+["notesPrompt", "notesMulti", "notesGood", "notesBad"].forEach(id => $(id).addEventListener("input", () => { saveTexts(); scheduleSave(); }));
 
 /* Prompt text size */
 const PFS_MIN = 10, PFS_MAX = 40, PFS_STEP = 2;
@@ -1401,6 +1446,178 @@ $("tcBody").addEventListener("click", e => {
 $("notesPrompt").addEventListener("input", tcStaleCheck);
 $("body").addEventListener("input", tcStaleCheck);
 $("body").addEventListener("click", () => setTimeout(tcStaleCheck));
+
+/* ---------- Side by Side: two halves, each showing the rubric, a source clip, the golden edit or the generated video ---------- */
+const SBS_ITEMS = [["rubric", "Rubric"], ["src", "Source Clips"], ["gold", "Golden Edit"], ["gen", "Generated Video"]];
+const SBS_EMPTY = { src: "No source clips for this task yet. Use Load videos from MEGA, or Upload Source Clips.",
+  gold: "No golden edit for this task yet. Use Load videos from MEGA, or Upload Golden Edit.",
+  gen: "No generated video for this task yet. Use Load videos from MEGA, or Upload Generated." };
+const SBS_STORE = "rr-sbs-layout";
+let halves = [{ sel: "gold", mode: "main", at: 1 }, { sel: "gen", mode: "main", at: 2 }];   /* first visit: golden left, generated right */
+try { const j = JSON.parse(localStorage.getItem(SBS_STORE) || "null");
+  if (Array.isArray(j) && j.length === 2 && j.every(h => SBS_ITEMS.some(x => x[0] === h.sel))) halves = j.map((h, i) => ({ sel: h.sel, mode: h.sel === "src" && h.mode === "clips" ? "clips" : "main", at: +h.at || i + 1 })); } catch (_) {}
+let sbsFocus = 0, sbsClock = 3;
+const sbsBody = h => $("sbsBody" + h);
+/* if both halves pick the same thing, the half that picked it last shows it */
+function sbsOwner(sel){
+  const hs = [0, 1].filter(h => halves[h].sel === sel);
+  return !hs.length ? -1 : hs.length === 1 ? hs[0] : (halves[0].at >= halves[1].at ? 0 : 1);
+}
+const hostOf = (v, sel) => sel === "src" ? (v.active && v.active.host) : sel === "gold" || sel === "gen" ? (v[sel] && v[sel].host) : null;
+const playerOf = (v, sel) => sel === "src" ? (v.active && v.active.player) : sel === "gold" || sel === "gen" ? (v[sel] && v[sel].player) : null;
+function moveTo(el, parent, before){ if (el && el.parentNode !== parent) parent.insertBefore(el, before || null); }
+function sendHome(v){
+  v.clips.forEach(c => moveTo(c.host, $("clipStage")));
+  ["gold", "gen"].forEach(k => { if (v[k]) moveTo(v[k].host, $(STAGE[k])); });
+}
+function placeVids(){ if (curTab === "sbs") sbsRender(); else sendHome(V()); }
+function sbsPlayers(){
+  const v = V(), out = [];
+  [0, 1].forEach(h => { const s = halves[h].sel; if (s !== "rubric" && sbsOwner(s) === h){ const p = playerOf(v, s); if (p) out.push(p); } });
+  return out;
+}
+function sbsFocusPlayer(){
+  const v = V(), pick = h => { const s = halves[h].sel; return s !== "rubric" && sbsOwner(s) === h ? playerOf(v, s) : null; };
+  return pick(sbsFocus) || pick(1 - sbsFocus);
+}
+function sbsBar(h){
+  const v = V(), half = halves[h], btn = (cls, attrs, label, on) =>
+    `<span class="sub${on ? " on" : ""}${cls}"><button class="subbtn" role="tab" aria-selected="${!!on}" ${attrs}>${esc(label)}</button></span>`;
+  if (half.mode === "clips")
+    return btn("", 'data-sel="src"', "Source Clips", true)
+      + v.clips.map((c, i) => btn("", `data-clip="${i}" title="${escA(c.name)}"`, stem(c.name), c === v.active)).join("")
+      + btn(" back", 'data-back="1"', "Back", false);
+  return SBS_ITEMS.map(([k, label]) => btn("", `data-sel="${k}"`, k === "src" && v.clips.length ? label + " (" + v.clips.length + ")" : label, half.sel === k)).join("");
+}
+function sbsRender(pos){
+  if (curTab !== "sbs"){ sendHome(V()); return; }
+  if (pos === undefined) pos = readPos();
+  const v = V();
+  /* what each half shows */
+  const want = new Map();     /* element -> half */
+  let rubricHalf = -1;
+  [0, 1].forEach(h => {
+    const s = halves[h].sel, body = sbsBody(h), noteEl = body.querySelector(".sbsnote");
+    $("sbsBar" + h).innerHTML = sbsBar(h);
+    body.classList.toggle("rub", s === "rubric" && sbsOwner(s) === h);
+    let msg = "";
+    if (sbsOwner(s) !== h) msg = (s === "rubric" ? "The rubric" : s === "src" ? "The source clip" : s === "gold" ? "The golden edit" : "The generated video") + " is showing on the " + (h ? "left" : "right") + ".";
+    else if (s === "rubric") rubricHalf = h;
+    else { const el = hostOf(v, s); if (el) want.set(el, h); else msg = SBS_EMPTY[s]; }
+    noteEl.textContent = msg; noteEl.hidden = !msg;
+  });
+  /* videos not shown in a half go back to their own tabs (moving a video pauses it, so only move what changes) */
+  v.clips.forEach(c => { if (!want.has(c.host)) moveTo(c.host, $("clipStage")); });
+  ["gold", "gen"].forEach(k => { if (v[k] && !want.has(v[k].host)) moveTo(v[k].host, $(STAGE[k])); });
+  want.forEach((h, el) => { moveTo(el, sbsBody(h), sbsBody(h).querySelector(".sbsnote")); el.hidden = false; });
+  if (rubricHalf >= 0) moveTo(rubricBox, sbsBody(rubricHalf), sbsBody(rubricHalf).querySelector(".sbsnote"));
+  else moveTo(rubricBox, $("rubricPark"));
+  slots.sbs = rubricHalf >= 0 ? sbsBody(rubricHalf) : $("rubricPark");
+  if (rubricHalf >= 0){ document.querySelectorAll("#body textarea").forEach(fit); applyPos(pos); }
+  updBuffering();
+}
+function sbsSave(){ try { localStorage.setItem(SBS_STORE, JSON.stringify(halves)); } catch (_) {} }
+function sbsPick(h, sel, clips){
+  const pos = readPos();
+  const was = halves[h].sel, wasOwner = sbsOwner(sel) === h;
+  halves[h].sel = sel; if (!(was === sel && wasOwner)) halves[h].at = ++sbsClock;
+  halves[h].mode = sel === "src" && clips ? "clips" : "main";
+  sbsFocus = h;
+  players.forEach(p => p.pause());
+  sbsSave(); sbsRender(pos);
+}
+[0, 1].forEach(h => {
+  $("sbsBar" + h).addEventListener("click", e => {
+    const b = e.target.closest("button"); if (!b) return;
+    if (b.dataset.back){ halves[h].mode = "main"; sbsFocus = h; sbsSave(); sbsRender(); return; }   /* Source Clips stays picked */
+    if (b.dataset.clip != null){
+      const c = V().clips[+b.dataset.clip]; if (!c) return;
+      halves[h].at = ++sbsClock; sbsFocus = h; V().active = c; sbsSave(); renderClips(); return;
+    }
+    if (b.dataset.sel) sbsPick(h, b.dataset.sel, b.dataset.sel === "src");
+  });
+});
+document.querySelectorAll(".sbshalf").forEach(el => el.addEventListener("pointerdown", () => { sbsFocus = +el.dataset.h; }, true));
+
+/* ---------- autosave: edits kept in this browser only (localStorage), keyed to the exact CSV loaded ---------- */
+const SAVE_PREFIX = "rr-autosave:", SAVE_KEEP_DAYS = 14, SAVE_DELAY = 800;
+let saveKey = null, saveTimer = null;
+function hashText(s){               /* two 32-bit FNV-1a hashes + length: a stable name for this exact file */
+  let a = 0x811c9dc5, b = 0x01000193 ^ s.length;
+  for (let i = 0; i < s.length; i++){ const c = s.charCodeAt(i); a = Math.imul(a ^ c, 16777619); b = Math.imul(b ^ c, 2246822519) ^ (b >>> 13); }
+  return s.length.toString(36) + "-" + (a >>> 0).toString(36) + "-" + (b >>> 0).toString(36);
+}
+const lsGet = k => { try { return localStorage.getItem(k); } catch (_) { return null; } };
+const lsDel = k => { try { localStorage.removeItem(k); } catch (_) {} };
+function saveKeys(){ const out = []; try { for (let i = 0; i < localStorage.length; i++){ const k = localStorage.key(i); if (k && k.startsWith(SAVE_PREFIX)) out.push(k); } } catch (_) {} return out; }
+function pruneSaves(keepFor){
+  const cutoff = Date.now() - SAVE_KEEP_DAYS * 86400000;
+  saveKeys().forEach(k => { let at = 0; try { at = JSON.parse(lsGet(k)).savedAt || 0; } catch (_) {} if (at < cutoff && k !== keepFor) lsDel(k); });
+}
+const ROWF = ["id", "kind", "w", "ts", "crit", "ev", "why", "raw", "o"];
+function snapshot(){
+  saveTexts();
+  const out = {};
+  tasks.forEach(t => {
+    const e = {}, now = serTask(t);
+    if (["pos", "neg", "pfp", "pfn"].some(k => now[k] !== t.base[k]) || t.rows.some(r => ["id", "kind", "w", "ts", "crit", "ev", "why"].some(k => r[k] !== r.o[k])))
+      e.rows = t.rows.map(r => { const o = {}; ROWF.forEach(k => { if (r[k] !== undefined) o[k] = r[k]; }); return o; });
+    const tx = {}; Object.keys(TEXTS).forEach(k => { if (t.text[k] !== sc(t.n, k)) tx[k] = t.text[k]; });
+    if (Object.keys(tx).length) e.text = tx;
+    if (e.rows || e.text) out[t.id] = e;
+  });
+  return out;
+}
+const fmtWhen = ms => new Date(ms).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+const fmtClock = ms => new Date(ms).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+function saveNow(){
+  clearTimeout(saveTimer); saveTimer = null;
+  if (!sheet || !saveKey) return;
+  const snap = snapshot(), ind = $("saveInd");
+  if (!Object.keys(snap).length){ lsDel(saveKey); ind.textContent = ""; ind.classList.remove("err"); return; }
+  const at = Date.now(), json = JSON.stringify({ v: 1, name: sheet.name, savedAt: at, tasks: snap });
+  const put = () => { localStorage.setItem(saveKey, json); };
+  try { put(); }
+  catch (_) {
+    /* storage full: drop the other saved sheets (oldest first) and try again */
+    try { saveKeys().filter(k => k !== saveKey).map(k => { let a = 0; try { a = JSON.parse(lsGet(k)).savedAt || 0; } catch (_) {} return [a, k]; }).sort((x, y) => x[0] - y[0]).forEach(([, k]) => lsDel(k)); put(); }
+    catch (_) { ind.textContent = "Autosave unavailable in this browser"; ind.classList.add("err"); return; }
+  }
+  ind.textContent = "Saved " + fmtClock(at); ind.classList.remove("err");
+}
+function scheduleSave(){ if (!saveKey) return; clearTimeout(saveTimer); saveTimer = setTimeout(saveNow, SAVE_DELAY); }
+function clearSave(){ clearTimeout(saveTimer); saveTimer = null; if (saveKey) lsDel(saveKey); $("saveInd").textContent = "Downloaded"; $("saveInd").classList.remove("err"); }
+function offerRestore(){
+  let saved = null; try { saved = JSON.parse(lsGet(saveKey) || "null"); } catch (_) {}
+  if (!saved || !saved.tasks) return;
+  const ids = Object.keys(saved.tasks).filter(id => tasks.some(t => t.id === id));
+  if (!ids.length){ lsDel(saveKey); return; }
+  const dlg = $("restoreDlg");
+  $("restoreTitle").textContent = "Restore your unsaved edits from " + fmtWhen(saved.savedAt) + "?";
+  $("restoreTxt").textContent = "This browser kept edits to " + ids.length + " task" + (ids.length === 1 ? "" : "s") + " in this sheet that weren't downloaded (" + ids.slice(0, 4).join(", ") + (ids.length > 4 ? " and " + (ids.length - 4) + " more" : "") + "). Restore puts them back. Discard deletes them and keeps the sheet as it is.";
+  dlg._saved = saved; dlg._key = saveKey;
+  if (dlg.showModal) dlg.showModal(); else dlg.setAttribute("open", "");
+  $("restoreYes").focus();
+}
+function applySaved(saved){
+  Object.keys(saved.tasks).forEach(id => {
+    const t = tasks.find(x => x.id === id), e = saved.tasks[id]; if (!t) return;
+    if (Array.isArray(e.rows)) t.rows = e.rows.map(o => {
+      const r = { id: "", kind: "I", w: "", ts: "", crit: "", ev: "", why: "" }; ROWF.forEach(k => { if (o[k] !== undefined) r[k] = o[k]; });
+      if (!r.o) r.o = { id: "", kind: r.kind, w: "", ts: "", crit: "", ev: "", why: "" };
+      return r;
+    });
+    if (e.text) Object.keys(e.text).forEach(k => { if (k in TEXTS) t.text[k] = e.text[k]; });
+    t.undo = [];
+  });
+  dirty = true;
+  loadTexts(); draw(); updUndo(); tcStaleCheck();
+  $("saveInd").textContent = "Restored edits from " + fmtWhen(saved.savedAt);
+}
+$("restoreYes").addEventListener("click", () => { const d = $("restoreDlg"); d.close(); if (d._key === saveKey) applySaved(d._saved); });
+$("restoreNo").addEventListener("click", () => { const d = $("restoreDlg"); d.close(); lsDel(d._key); });
+$("restoreDlg").addEventListener("cancel", e => e.preventDefault());   /* Esc doesn't silently pick one */
+pruneSaves();
 
 </script>
 </body>
