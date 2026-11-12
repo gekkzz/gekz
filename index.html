@@ -11,8 +11,9 @@
 body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.35 system-ui,-apple-system,"Segoe UI",sans-serif}
 header{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:12px 24px;align-items:center;padding:16px 24px;border-bottom:1px solid var(--line)}
 h1{margin:0;font-size:18px;font-weight:600}
-.bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:flex-end}
-@media (max-width:1500px){header{grid-template-columns:minmax(0,1fr);justify-items:start}.bar{justify-content:flex-start}}
+.bar{display:flex;flex-direction:column;gap:10px;align-items:flex-end}
+.barrow{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:flex-end}
+@media (max-width:1500px){header{grid-template-columns:minmax(0,1fr);justify-items:start}.bar{align-items:flex-start}.barrow{justify-content:flex-start}}
 .meta{color:var(--mut);font-size:13px}
 .btn{all:unset;cursor:pointer;padding:8px 14px;border:1px solid var(--line);border-radius:8px;background:var(--btn);font-weight:600;font-size:14px}
 .btn:hover{border-color:var(--mut)}
@@ -215,6 +216,8 @@ td.id{width:64px}
 .dlg h2{margin:0 0 8px;font-size:17px}
 .dlg p{margin:0 0 18px;color:var(--mut);font-size:14px;line-height:1.5}
 .dlgact{display:flex;justify-content:flex-end;gap:10px}
+.btn.o-cyan.ready{border-color:#2ea043;opacity:1;cursor:default}
+#megaBtn:disabled:not(.ready){opacity:.75;cursor:progress}
 </style>
 </head>
 <body>
@@ -231,13 +234,17 @@ td.id{width:64px}
     <button class="tab" role="tab" aria-selected="false" data-tab="bad">What Went Wrong</button>
   </nav>
   <div class="bar">
-    <a class="meta" id="signout" href="/__logout" hidden>Sign out</a>
-    <span id="file" class="meta">No file loaded</span>
+    <div class="barrow">
     <label class="btn o-green" tabindex="0">Upload CSV<input id="up" type="file" accept=".csv,text/csv" hidden></label>
     <label class="btn o-green" tabindex="0">Upload Source Clips<input id="upSrc" type="file" accept="video/*,.mov" multiple hidden></label>
     <label class="btn o-green" tabindex="0">Upload Golden Edit<input id="upGold" type="file" accept="video/*,.mov" hidden></label>
     <label class="btn o-green" tabindex="0">Upload Generated<input id="upGen" type="file" accept="video/*,.mov" hidden></label>
+    </div>
+    <div class="barrow">
+    <a class="meta" id="signout" href="/__logout" hidden>Sign out</a>
+    <span id="file" class="meta">No file loaded</span>
     <button class="btn o-blue" id="dl" disabled>Download CSV</button>
+    </div>
   </div>
 </header>
 <div class="taskbar" id="taskbar" hidden>
@@ -538,7 +545,7 @@ function selectTask(t){
     $("tmeta").textContent = bits.join(" \u00b7 ");
     $("rheadTask").textContent = cur.id;
   }
-  updNav(); draw(); updUndo();
+  updNav(); draw(); updUndo(); setMegaBtn();
   Object.values(slots).forEach(el => { if (el !== slots.rubric) el.scrollTop = 0; });
   if (curTab === "rubric") window.scrollTo(0, 0);
 }
@@ -1128,16 +1135,9 @@ const mb = n => (n / 1048576).toFixed(n < 10485760 ? 1 : 0) + " MB";
 const vidType = name => /\.webm$/i.test(name) ? "video/webm" : "video/mp4";   /* Chrome sniffs .mov (QuickTime) content itself */
 
 function megaHide(){ $("megaPanel").hidden = true; $("megaPanel").innerHTML = ""; }
-function megaPanel(title, rows, err){
-  const p = $("megaPanel"); p.hidden = false;
-  p.innerHTML = '<div class="mhead"><span>' + esc(title) + '</span><span class="nact">'
-    + (megaBusy ? '<button class="btn" id="megaStop">Stop</button>' : '<button class="btn" id="megaClose">Close</button>') + '</span></div>'
-    + (err ? '<div class="err">' + esc(err) + '</div>' : '')
-    + rows.map((r, i) => '<div class="mrow"><span class="mname" title="' + escA(r.label) + '">' + esc(r.label) + '</span><progress id="mp' + i + '" max="1" value="' + (r.done ? 1 : 0) + '"></progress><span class="mst" id="ms' + i + '">' + esc(r.status || "") + '</span></div>').join("");
-  const s = $("megaStop"), c = $("megaClose");
-  if (s) s.onclick = () => { megaStreams.forEach(st => { try { st.destroy(); } catch (_) {} }); megaStreams = []; megaBusy = false; };
-  if (c) c.onclick = megaHide;
-}
+/* no progress pop-up: the MEGA button's label shows the state; errors go to the message bar */
+function megaPanel(title, rows, err){ megaHide(); if (err) note(title + ": " + err); }
+
 function megaDownload(file, onProgress){
   return new Promise((res, rej) => {
     let st; try { st = file.download(); } catch (e) { rej(e); return; }
@@ -1151,9 +1151,23 @@ function megaDownload(file, onProgress){
 }
 
 $("megaBtn").addEventListener("click", () => megaLoad());
+const MEGA_LABEL = { idle: "Load videos from MEGA", loading: "Loading Videos...", ready: "Task Videos Ready" };
+function setMegaBtn(){
+  const st = (cur && cur.mega) || "idle", b = $("megaBtn");
+  b.textContent = MEGA_LABEL[st]; b.disabled = st !== "idle"; b.classList.toggle("ready", st === "ready");
+  b.title = st === "ready" ? "This task's videos are loaded" : st === "loading" ? "Loading this task's videos from MEGA" : "Load this task's videos from the MEGA links in the sheet";
+}
 /* loads the current task's videos; resolves true when they're ready to play */
 async function megaLoad(opts = {}){
-  if (!cur || megaBusy) return false;
+  if (!cur) return false;
+  if (megaBusy){ flash("Videos for another task are still loading. Try again when they finish."); return false; }
+  const t = cur;
+  t.mega = "loading"; setMegaBtn(); note("");
+  let ok = false;
+  try { ok = await megaLoadInner(opts); } finally { t.mega = ok ? "ready" : "idle"; if (t === cur) setMegaBtn(); }
+  return ok;
+}
+async function megaLoadInner(opts){
   const t = cur;
   const want = [["src", "Source clips"], ["gold", "Golden edit"], ["gen", "Generated video"]].filter(([k]) => sc(t.n, k).trim());
   if (!want.length){ flash("This task has no MEGA links in its source clips, golden edit or generated video columns."); return false; }
@@ -1181,6 +1195,13 @@ async function megaLoad(opts = {}){
       const url = "/mega-stream/" + [link0.root, link0.key, megaHandle(it.f), it.f.name].map(encodeURIComponent).join("/");
       if (it.k === "src") addClip(url, it.f.name, t); else setSingle(it.k, url, it.f.name, t);
     });
+    const vids = todo.map(it => {
+      const h = it.k === "src" ? (t.vids.clips.find(c => c.name === it.f.name) || {}).host : (t.vids[it.k] || {}).host;
+      return h && h.querySelector("video");
+    }).filter(Boolean);
+    await Promise.race([
+      Promise.all(vids.map(v => v.readyState >= 1 || v.error ? null : new Promise(res => { v.addEventListener("loadedmetadata", res, { once: true }); v.addEventListener("error", res, { once: true }); }))),
+      new Promise(res => setTimeout(res, 30000))]);
     megaBusy = false;
     megaPanel(todo.length ? "Streaming " + todo.length + " video(s) for task " + t.id + ". They play straight away; only what you watch is downloaded." : "All of this task's videos are already loaded.",
               items.map(it => ({ label: it.label, status: have.has(it.f.name) ? "already loaded" : "streaming", done: true })));
