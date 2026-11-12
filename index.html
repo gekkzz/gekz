@@ -162,7 +162,8 @@ tr.flashrow{outline:2px solid #7cc4ff;outline-offset:-2px}
 .taskbar input[type=search]:focus{outline:none;border-color:var(--mut)}
 .taskbar .navb{padding:5px 11px}
 .tmeta{color:var(--mut)}
-.tscore{margin-left:auto;display:inline-flex;align-items:baseline;gap:8px}
+.tright{margin-left:auto;display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:10px 12px}
+.tscore{display:inline-flex;align-items:baseline;gap:8px;margin-right:4px}
 .tscore b{font-size:16px}
 .tscore .sheetsc{color:#d4a72c;font-size:12px}
 .megap{margin:10px 24px 0;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--panel);font-size:13px}
@@ -209,6 +210,11 @@ td.id{width:64px}
 .compact td.c-why textarea{font-size:13px}
 .stagehead{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px}
 .stagehead .vname{padding:0}
+.dlg{max-width:440px;width:calc(100% - 32px);padding:20px 22px;border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--fg)}
+.dlg::backdrop{background:rgba(0,0,0,.55)}
+.dlg h2{margin:0 0 8px;font-size:17px}
+.dlg p{margin:0 0 18px;color:var(--mut);font-size:14px;line-height:1.5}
+.dlgact{display:flex;justify-content:flex-end;gap:10px}
 </style>
 </head>
 <body>
@@ -219,8 +225,8 @@ td.id{width:64px}
     <button class="tab" role="tab" aria-selected="false" data-tab="src" id="srcTab">Source Clips</button>
     <button class="tab" role="tab" aria-selected="false" data-tab="gold">Golden Edit</button>
     <button class="tab" role="tab" aria-selected="false" data-tab="gen">Generated Video</button>
-    <button class="tab" role="tab" aria-selected="false" data-tab="multi">Multi-Take Moments</button>
     <span class="tabbreak" aria-hidden="true"></span>
+    <button class="tab" role="tab" aria-selected="false" data-tab="multi">Multi-Take Moments</button>
     <button class="tab" role="tab" aria-selected="false" data-tab="good">What Went Well</button>
     <button class="tab" role="tab" aria-selected="false" data-tab="bad">What Went Wrong</button>
   </nav>
@@ -232,8 +238,6 @@ td.id{width:64px}
     <label class="btn o-green" tabindex="0">Upload Golden Edit<input id="upGold" type="file" accept="video/*,.mov" hidden></label>
     <label class="btn o-green" tabindex="0">Upload Generated<input id="upGen" type="file" accept="video/*,.mov" hidden></label>
     <button class="btn o-blue" id="dl" disabled>Download CSV</button>
-    <button class="btn o-yellow" id="undo" disabled title="Undo the last rubric change in this task">Undo</button>
-    <button class="btn o-yellow" id="add" disabled>Add Row</button>
   </div>
 </header>
 <div class="taskbar" id="taskbar" hidden>
@@ -244,10 +248,19 @@ td.id{width:64px}
   <label>Search <input id="taskSearch" type="search" placeholder="Task ID or category" autocomplete="off" spellcheck="false" aria-label="Search tasks"></label>
   <span class="tmeta" id="tfound"></span>
   <span class="tmeta" id="tmeta"></span>
+  <div class="tright">
   <span class="tscore">Score <b class="scoreV">&mdash;</b><span class="scsub subV"></span><span class="sheetsc" id="sheetSc"></span></span>
   <button class="btn o-cyan" id="megaBtn" title="Download this task's videos from the MEGA links in the sheet">Load videos from MEGA</button>
+  <button class="btn o-yellow" id="undo" disabled title="Undo the last rubric change in this task">Undo</button>
+  <button class="btn o-yellow" id="add" disabled>Add Row</button>
+  </div>
 </div>
 <div id="megaPanel" class="megap" hidden></div>
+<dialog id="askDlg" class="dlg" aria-labelledby="askTitle">
+  <h2 id="askTitle">Load this task's videos?</h2>
+  <p id="askTxt"></p>
+  <div class="dlgact"><button class="btn" id="askClose" type="button">Close</button><button class="btn o-blue" id="askOk" type="button">Confirm</button></div>
+</dialog>
 <div id="msg" class="msg" hidden></div>
 <section id="p-rubric">
 <div id="rubricBox">
@@ -988,6 +1001,7 @@ function flash(t){ note(t); setTimeout(() => { if ($("msg").textContent === t) n
 function viewSpec(spec){
   const p = parseTs(spec); if (!p) return;
   const c = findClip(p.name);
+  if (!c && !V().clips.length && cur && parseMegaLink(sc(cur.n, "src"))){ askLoad(spec); return; }
   if (!c){
     flash(V().clips.length ? "No source clip matches \"" + p.name + "\". This task's clips: " + V().clips.map(x => stem(x.name)).join(", ") + "."
                            : "This task has no source clips yet. Load them from MEGA or upload them, then try again.");
@@ -996,6 +1010,27 @@ function viewSpec(spec){
   showTab("src"); V().active = c; renderClips(); note("");
   c.player.seekTo(p.sec);
 }
+
+/* "Load this task's videos?" box shown when a timestamp is clicked before any clips are loaded */
+async function askLoad(spec){
+  if (megaBusy){ flash("This task's videos are still loading. Try the timestamp again in a moment."); return; }
+  const dlg = $("askDlg"), t = cur;
+  const streaming = await canStream();
+  $("askTxt").textContent = "Task " + t.id + "'s videos aren't loaded yet, so this timestamp (" + spec + ") can't be shown. "
+    + (streaming ? "Confirm to load its source clips, golden edit and generated video from MEGA. They start playing within a few seconds, and you'll be taken to this moment."
+                 : "Confirm to download its source clips, golden edit and generated video from MEGA. Large files can take a while; you'll be taken to this moment when the clips are ready.");
+  dlg._spec = spec; dlg._task = t;
+  if (dlg.showModal) dlg.showModal(); else dlg.setAttribute("open", "");
+  $("askOk").focus();
+}
+$("askClose").addEventListener("click", () => $("askDlg").close());
+$("askOk").addEventListener("click", async () => {
+  const dlg = $("askDlg"), spec = dlg._spec, t = dlg._task;
+  dlg.close();
+  if (t !== cur) return;
+  const ok = await megaLoad({ preconfirmed: true });
+  if (ok && t === cur && findClip((parseTs(spec) || {}).name || "")) viewSpec(spec);
+});
 
 /* ---------- notepads ---------- */
 function wireCopy(btn, area, tipId){
@@ -1115,11 +1150,13 @@ function megaDownload(file, onProgress){
   });
 }
 
-$("megaBtn").addEventListener("click", async () => {
-  if (!cur || megaBusy) return;
+$("megaBtn").addEventListener("click", () => megaLoad());
+/* loads the current task's videos; resolves true when they're ready to play */
+async function megaLoad(opts = {}){
+  if (!cur || megaBusy) return false;
   const t = cur;
   const want = [["src", "Source clips"], ["gold", "Golden edit"], ["gen", "Generated video"]].filter(([k]) => sc(t.n, k).trim());
-  if (!want.length){ flash("This task has no MEGA links in its source clips, golden edit or generated video columns."); return; }
+  if (!want.length){ flash("This task has no MEGA links in its source clips, golden edit or generated video columns."); return false; }
   megaBusy = true; megaPanel("Finding this task's videos on MEGA…", []);
   let items = [];
   try {
@@ -1133,7 +1170,7 @@ $("megaBtn").addEventListener("click", async () => {
       } else items.push({ k, f: node, label: label + ": " + node.name });
     }
   } catch (e) {
-    megaBusy = false; megaPanel("Couldn't read this task's MEGA links", [], megaErr(e)); return;
+    megaBusy = false; megaPanel("Couldn't read this task's MEGA links", [], megaErr(e)); return false;
   }
   const link0 = parseMegaLink(sc(t.n, want[0][0]));
   if (await canStream()){
@@ -1147,15 +1184,15 @@ $("megaBtn").addEventListener("click", async () => {
     megaBusy = false;
     megaPanel(todo.length ? "Streaming " + todo.length + " video(s) for task " + t.id + ". They play straight away; only what you watch is downloaded." : "All of this task's videos are already loaded.",
               items.map(it => ({ label: it.label, status: have.has(it.f.name) ? "already loaded" : "streaming", done: true })));
-    return;
+    return true;
   }
   /* skip videos already loaded for this task */
   const have = new Set(t.vids.clips.map(c => c.name).concat(["gold", "gen"].map(k => t.vids[k] && t.vids[k].name)).filter(Boolean));
   items = items.filter(it => !have.has(it.f.name));
-  if (!items.length){ megaBusy = false; megaPanel("All of this task's videos are already loaded.", []); return; }
+  if (!items.length){ megaBusy = false; megaPanel("All of this task's videos are already loaded.", []); return true; }
   const total = items.reduce((s, it) => s + (it.f.size || 0), 0);
   megaBusy = false; megaPanel("Ready", items.map(it => ({ label: it.label, status: mb(it.f.size || 0) })));
-  if (!confirm("Download " + items.length + " video file(s) for task " + t.id + " from MEGA (" + mb(total) + ")?\n\nLarge downloads can take a while, and MEGA limits how much can be downloaded without an account.")){ megaHide(); return; }
+  if (!opts.preconfirmed && !confirm("Download " + items.length + " video file(s) for task " + t.id + " from MEGA (" + mb(total) + ")?\n\nLarge downloads can take a while, and MEGA limits how much can be downloaded without an account.")){ megaHide(); return false; }
   megaBusy = true; megaStreams = [];
   const rows = items.map(it => ({ label: it.label, status: "waiting" }));
   megaPanel("Downloading for task " + t.id + "…", rows);
@@ -1178,7 +1215,8 @@ $("megaBtn").addEventListener("click", async () => {
   const stopped = !megaBusy;
   megaBusy = false; megaStreams = [];
   megaPanel(stopped ? "Stopped. " + done + " of " + items.length + " downloaded." : failed ? "Stopped after an error. " + done + " of " + items.length + " downloaded." : "All " + done + " video(s) loaded for task " + t.id + ".", rows, failed);
-});
+  return !stopped && !failed && done > 0;
+}
 function megaErr(e){
   const m = String((e && e.message) || e || "Unknown error");
   if (/bandwidth|quota|EOVERQUOTA|509|-17/i.test(m)) return "MEGA's download limit was reached (" + m + "). Wait a while and try again, or upload the videos yourself.";
