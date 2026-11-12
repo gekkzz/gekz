@@ -164,8 +164,6 @@ tr.flashrow{outline:2px solid #7cc4ff;outline-offset:-2px}
 .player{position:relative}
 .szo{position:absolute;pointer-events:none;z-index:2}
 .szo svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
-.szo .szlab{position:absolute;transform:translate(-50%,-50%);padding:3px 10px;border-radius:999px;background:rgba(20,20,20,.82);color:#fff;font:600 12px/1.2 system-ui,sans-serif;white-space:nowrap}
-.szo .szlab.safe{color:#ff6b6b}
 .saveind{opacity:.8}.saveind.err{color:#e5534b;opacity:1}
 
 .compact tr.hasview .tscopy{all:unset;display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:6px;cursor:pointer;color:var(--mut)}
@@ -1513,11 +1511,7 @@ function szOverlay(host){
     const pts = SZ_POLY.map(p => p.join(",")).join(" ");
     o.innerHTML = `<svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
       <path fill="rgba(200,40,30,.30)" fill-rule="evenodd" d="M0,0H100V100H0Z M${SZ_POLY.map(p => p.join(",")).join(" L")}Z"/>
-      <polygon points="${pts}" fill="none" stroke="#e8d44d" stroke-width="2" stroke-dasharray="6 4" vector-effect="non-scaling-stroke"/></svg>
-      <span class="szlab" style="left:50%;top:${SZ.top / 2}%">Top ${SZ.top}%</span>
-      <span class="szlab safe" style="left:${(SZ.side + 100 - SZ.side) / 2}%;top:${SZ.top}%">Safe area</span>
-      <span class="szlab" style="left:${(100 - SZ.btnW) / 2}%;top:${100 - SZ.bottom / 2}%">Bottom ${SZ.bottom}%</span>
-      <span class="szlab" style="left:${100 - SZ.btnW / 2}%;top:${100 - SZ.btnH / 2}%">Buttons</span>`;
+      <polygon points="${pts}" fill="none" stroke="#e8d44d" stroke-width="2" stroke-dasharray="6 4" vector-effect="non-scaling-stroke"/></svg>`;
     pl.appendChild(o);
     const place = () => {
       const vw = vid.videoWidth, vh = vid.videoHeight, cw = vid.clientWidth, ch = vid.clientHeight;
