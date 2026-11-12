@@ -167,6 +167,7 @@ tr.flashrow{outline:2px solid #7cc4ff;outline-offset:-2px}
 .player{position:relative}
 .szo{position:absolute;pointer-events:none;z-index:2}
 .szo svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+#tcRun{display:none}   /* Test Against Rubric hidden for now: delete this line to bring the button back */
 .saveind{opacity:.8}.saveind.err{color:#e5534b;opacity:1}
 
 .compact tr.hasview .tscopy{all:unset;display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:6px;cursor:pointer;color:var(--mut)}
@@ -254,7 +255,6 @@ td.id{width:64px}
   <div class="bar">
     <div class="barrow">
     <span id="file" class="meta fname">No file loaded</span>
-    <a class="meta" id="signout" href="/__logout" hidden>Sign out</a>
     <label class="btn o-green" tabindex="0">Upload CSV<input id="up" type="file" accept=".csv,text/csv" hidden></label>
     <label class="btn o-green" tabindex="0">Upload Source Clips<input id="upSrc" type="file" accept="video/*,.mov" multiple hidden></label>
     <label class="btn o-green" tabindex="0">Upload Golden Edit<input id="upGold" type="file" accept="video/*,.mov" hidden></label>
@@ -1121,7 +1121,6 @@ $("pfsDown").addEventListener("click", () => setPFS(pfs - PFS_STEP));
 $("pfsUp").addEventListener("click", () => setPFS(pfs + PFS_STEP));
 setPFS(pfs);
 
-if (/^https?:$/.test(location.protocol) && !/^(localhost|127\.0\.0\.1)$/.test(location.hostname)) $("signout").hidden = false;
 
 /* ---------- streaming service worker (only on a real web address, not a double-clicked file) ---------- */
 let swReady = null;
