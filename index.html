@@ -13,7 +13,7 @@ header{display:grid;grid-template-columns:minmax(0,1fr) max-content;gap:12px 24p
 h1{margin:0;font-size:18px;font-weight:600}
 .bar{display:flex;flex-direction:column;gap:10px;align-items:flex-end}
 .barrow{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:flex-end}
-@media (max-width:1500px){header{grid-template-columns:minmax(0,1fr);justify-items:start}.bar{align-items:flex-start}.barrow{justify-content:flex-start}}
+@media (max-width:1400px){header{grid-template-columns:minmax(0,1fr);justify-items:start}.bar{align-items:flex-start}.barrow{justify-content:flex-start}}
 .meta{color:var(--mut);font-size:13px}
 .btn{all:unset;cursor:pointer;padding:8px 14px;border:1px solid var(--line);border-radius:8px;background:var(--btn);font-weight:600;font-size:14px}
 .btn:hover{border-color:var(--mut)}
@@ -160,6 +160,12 @@ tr.flashrow{outline:2px solid #7cc4ff;outline-offset:-2px}
 @media (max-width:960px){.sbs{grid-template-columns:minmax(0,1fr)}}
 .vhost:not([hidden]){display:flex;flex-direction:column}
 .vhost .vname{order:2;text-align:right;padding:8px 2px 0}
+.sbsbar .sub.szc{margin-left:auto}
+.player{position:relative}
+.szo{position:absolute;pointer-events:none;z-index:2}
+.szo svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+.szo .szlab{position:absolute;transform:translate(-50%,-50%);padding:3px 10px;border-radius:999px;background:rgba(20,20,20,.82);color:#fff;font:600 12px/1.2 system-ui,sans-serif;white-space:nowrap}
+.szo .szlab.safe{color:#ff6b6b}
 .saveind{opacity:.8}.saveind.err{color:#e5534b;opacity:1}
 
 .compact tr.hasview .tscopy{all:unset;display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:6px;cursor:pointer;color:var(--mut)}
@@ -239,14 +245,10 @@ td.id{width:64px}
   <nav class="tabs" role="tablist" aria-label="Sections">
     <button class="tab on" role="tab" aria-selected="true" data-tab="rubric">Rubric</button>
     <button class="tab" role="tab" aria-selected="false" data-tab="prompt">Prompt</button>
-    <button class="tab" role="tab" aria-selected="false" data-tab="src" id="srcTab">Source Clips</button>
-    <button class="tab" role="tab" aria-selected="false" data-tab="gold">Golden Edit</button>
-    <button class="tab" role="tab" aria-selected="false" data-tab="gen">Generated Video</button>
     <button class="tab" role="tab" aria-selected="false" data-tab="sbs">Side by Side</button>
-    <span class="tabbreak" aria-hidden="true"></span>
-    <button class="tab" role="tab" aria-selected="false" data-tab="multi">Multi-Take Moments</button>
-    <button class="tab" role="tab" aria-selected="false" data-tab="good">What Went Well</button>
-    <button class="tab" role="tab" aria-selected="false" data-tab="bad">What Went Wrong</button>
+        <button class="tab" role="tab" aria-selected="false" data-tab="multi">Multi-Take Moments</button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="good">Went Well</button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="bad">Went Wrong</button>
   </nav>
   <div class="bar">
     <div class="barrow">
@@ -371,7 +373,7 @@ td.id{width:64px}
 <section id="p-good" hidden>
   <div class="split">
     <div class="stage">
-      <div class="nhead top"><label for="notesGood">What Went Well</label>
+      <div class="nhead top"><label for="notesGood">Went Well</label>
         <span class="nact"><span class="tip" id="gtip" aria-live="polite"></span><button class="btn" id="gcopy">Copy to clipboard</button></span></div>
       <textarea id="notesGood" class="notes solo" spellcheck="false" placeholder="Write what the model did well (column S)"></textarea>
     </div>
@@ -382,7 +384,7 @@ td.id{width:64px}
 <section id="p-bad" hidden>
   <div class="split">
     <div class="stage">
-      <div class="nhead top"><label for="notesBad">What Went Wrong</label>
+      <div class="nhead top"><label for="notesBad">Went Wrong</label>
         <span class="nact"><span class="tip" id="btip" aria-live="polite"></span><button class="btn" id="bcopy">Copy to clipboard</button></span></div>
       <textarea id="notesBad" class="notes solo" spellcheck="false" placeholder="Write what the model could have done better (column T)"></textarea>
     </div>
@@ -978,7 +980,6 @@ function renderClips(){
   v.clips.forEach(c => { const on = c === v.active; c.host.hidden = !on; if (!on) c.player.pause(); });
   $("clipTabs").hidden = !v.clips.length;
   $("srcEmpty").hidden = v.clips.length > 0;
-  $("srcTab").textContent = v.clips.length ? "Source Clips (" + v.clips.length + ")" : "Source Clips";
   placeVids();
   updBuffering();
 }
@@ -1069,10 +1070,11 @@ function viewSpec(spec){
     return;
   }
   note("");
-  if (curTab === "sbs" && sbsOwner("rubric") >= 0){       /* keep the rubric where it is; open the clip in the other half */
-    const h = 1 - sbsOwner("rubric");
-    V().active = c; sbsPick(h, "src", true); renderClips();
-  } else { showTab("src"); V().active = c; renderClips(); }
+  /* clips open in Side by Side: in the half that isn't showing the rubric (or the one already on Source Clips) */
+  if (curTab !== "sbs") showTab("sbs");
+  const r = sbsOwner("rubric"), s0 = sbsOwner("src");
+  const h = r >= 0 ? 1 - r : s0 >= 0 ? s0 : 0;
+  V().active = c; sbsPick(h, "src", true); renderClips();
   c.player.seekTo(p.sec);
 }
 
@@ -1489,7 +1491,49 @@ function sbsBar(h){
     return btn("", 'data-sel="src"', "Source Clips", true)
       + v.clips.map((c, i) => btn("", `data-clip="${i}" title="${escA(c.name)}"`, stem(c.name), c === v.active)).join("")
       + btn(" back", 'data-back="1"', "Back", false);
-  return SBS_ITEMS.map(([k, label]) => btn("", `data-sel="${k}"`, k === "src" && v.clips.length ? label + " (" + v.clips.length + ")" : label, half.sel === k)).join("");
+  return SBS_ITEMS.map(([k, label]) => btn("", `data-sel="${k}"`, k === "src" && v.clips.length ? label + " (" + v.clips.length + ")" : label, half.sel === k)).join("")
+    + ((half.sel === "gold" || half.sel === "gen") && v[half.sel] && sbsOwner(half.sel) === h
+       ? btn(" szc", 'data-sz="1" title="Outline the Instagram Reels safe zone on the video"', "Safe Zone Checker", safeZone) : "");
+}
+
+/* ---------- Safe Zone Checker: Instagram Reels safe area drawn over the golden edit / generated video ----------
+   Unsafe: top 14% (header), bottom 35% (caption, handle, audio), 6% each side,
+   bottom-right 21% wide x 40% tall (like/comment/share buttons). Drawn over the picture itself, not the black bars. */
+let safeZone = false;
+try { safeZone = localStorage.getItem("rr-safezone") === "1"; } catch (_) {}
+const SZ = { top: 14, bottom: 35, side: 6, btnW: 21, btnH: 40 };
+const SZ_POLY = (() => { const L = SZ.side, R = 100 - SZ.side, T = SZ.top, B = 100 - SZ.bottom, bx = 100 - SZ.btnW, by = 100 - SZ.btnH;
+  return [[L, T], [R, T], [R, by], [bx, by], [bx, B], [L, B]]; })();
+function szOverlay(host){
+  const pl = host.querySelector(".player"), vid = pl && pl.querySelector("video"); if (!vid) return;
+  let o = pl.querySelector(".szo");
+  if (!safeZone){ if (o) o.hidden = true; return; }
+  if (!o){
+    o = document.createElement("div"); o.className = "szo";
+    const pts = SZ_POLY.map(p => p.join(",")).join(" ");
+    o.innerHTML = `<svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+      <path fill="rgba(200,40,30,.30)" fill-rule="evenodd" d="M0,0H100V100H0Z M${SZ_POLY.map(p => p.join(",")).join(" L")}Z"/>
+      <polygon points="${pts}" fill="none" stroke="#e8d44d" stroke-width="2" stroke-dasharray="6 4" vector-effect="non-scaling-stroke"/></svg>
+      <span class="szlab" style="left:50%;top:${SZ.top / 2}%">Top ${SZ.top}%</span>
+      <span class="szlab safe" style="left:${(SZ.side + 100 - SZ.side) / 2}%;top:${SZ.top}%">Safe area</span>
+      <span class="szlab" style="left:${(100 - SZ.btnW) / 2}%;top:${100 - SZ.bottom / 2}%">Bottom ${SZ.bottom}%</span>
+      <span class="szlab" style="left:${100 - SZ.btnW / 2}%;top:${100 - SZ.btnH / 2}%">Buttons</span>`;
+    pl.appendChild(o);
+    const place = () => {
+      const vw = vid.videoWidth, vh = vid.videoHeight, cw = vid.clientWidth, ch = vid.clientHeight;
+      if (!vw || !vh || !cw || !ch){ o.style.display = "none"; return; }
+      const k = Math.min(cw / vw, ch / vh), w = vw * k, hh = vh * k;
+      Object.assign(o.style, { display: "", left: vid.offsetLeft + (cw - w) / 2 + "px", top: vid.offsetTop + (ch - hh) / 2 + "px", width: w + "px", height: hh + "px" });
+    };
+    o._place = place;
+    vid.addEventListener("loadedmetadata", place); vid.addEventListener("resize", place);
+    if (window.ResizeObserver) new ResizeObserver(place).observe(vid); else window.addEventListener("resize", place);
+  }
+  o.hidden = false; o._place();
+}
+function szApply(){
+  const v = (cur || NOTASK).vids;
+  ["gold", "gen"].forEach(k => { if (v[k]) szOverlay(v[k].host); });
 }
 function sbsRender(pos){
   if (curTab !== "sbs"){ sendHome(V()); return; }
@@ -1515,6 +1559,7 @@ function sbsRender(pos){
   if (rubricHalf >= 0) moveTo(rubricBox, sbsBody(rubricHalf), sbsBody(rubricHalf).querySelector(".sbsnote"));
   else moveTo(rubricBox, $("rubricPark"));
   slots.sbs = rubricHalf >= 0 ? sbsBody(rubricHalf) : $("rubricPark");
+  szApply();
   if (rubricHalf >= 0){ document.querySelectorAll("#body textarea").forEach(fit); applyPos(pos); }
   updBuffering();
 }
@@ -1531,6 +1576,7 @@ function sbsPick(h, sel, clips){
 [0, 1].forEach(h => {
   $("sbsBar" + h).addEventListener("click", e => {
     const b = e.target.closest("button"); if (!b) return;
+    if (b.dataset.sz){ safeZone = !safeZone; try { localStorage.setItem("rr-safezone", safeZone ? "1" : "0"); } catch (_) {} sbsRender(); return; }
     if (b.dataset.back){ halves[h].mode = "main"; sbsFocus = h; sbsSave(); sbsRender(); return; }   /* Source Clips stays picked */
     if (b.dataset.clip != null){
       const c = V().clips[+b.dataset.clip]; if (!c) return;
