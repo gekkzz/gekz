@@ -187,6 +187,20 @@ tr.flashrow{outline:2px solid #7cc4ff;outline-offset:-2px}
 .szo{position:absolute;pointer-events:none;z-index:2}
 .szo svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
 #tcRun{display:none}   /* Test Against Rubric hidden for now: delete this line to bring the button back */
+/* live rubric rows / moments while a video plays */
+#body tr.live > td{background:rgba(56,139,253,.10)}
+#body tr.live > td:first-child{box-shadow:inset 3px 0 0 #388bfd}
+#rubricBox.compact #body tr.live{background:rgba(56,139,253,.10);box-shadow:inset 3px 0 0 #388bfd}
+#rubricBox.compact #body tr.live > td{background:none;box-shadow:none}
+.chip.live{background:#2c6ab8;color:#fff}
+/* notes with clickable timestamps: shown as text with links; click anywhere else to edit */
+.notesview{white-space:pre-wrap;overflow-wrap:anywhere;cursor:text;border:1px solid var(--line);border-radius:8px;color:var(--fg);font:inherit;font-size:14px}
+.notesview .ph{color:var(--mut)}
+.tslink{cursor:pointer;color:#8ab4f8;border-radius:3px;text-decoration:underline;text-decoration-color:rgba(138,180,248,.5);text-underline-offset:2px}
+.tslink:hover{background:rgba(138,180,248,.16)}
+.tslink.live{background:rgba(56,139,253,.38);color:#fff}
+.tslink:focus-visible{outline:2px solid var(--fg)}
+textarea.notes[hidden],.notesview[hidden]{display:none !important}
 .saveind{opacity:.8}.saveind.err{color:#e5534b;opacity:1}
 
 .compact tr.hasview .tscopy{all:unset;display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:6px;cursor:pointer;color:var(--mut)}
@@ -579,6 +593,7 @@ function saveTexts(){
 function loadTexts(){
   const t = cur || NOTASK;
   Object.keys(TEXTS).forEach(k => { $(TEXTS[k]).value = t.text[k] || ""; });
+  if (typeof renderNoteViews === "function") renderNoteViews();
 }
 function selectTask(t){
   if (t === cur && t) return;
@@ -650,6 +665,7 @@ function draw(){
   }).join("");
   document.querySelectorAll("#body textarea").forEach(a => { a.value = rowOf(a)[a.dataset.k] || ""; fit(a); mark(a); });
   score();
+  liveUpdate();
 }
 
 function score(){
@@ -669,7 +685,7 @@ $("body").addEventListener("input", e => {
   r[k] = a.value; if (k === "id") r.raw = false;
   fit(a); mark(a); dirty = true; scheduleSave();
   if (k === "w") score();
-  if (k === "ts") a.parentElement.querySelector(".chips").innerHTML = chipsHTML(r, +a.dataset.n);
+  if (k === "ts"){ a.parentElement.querySelector(".chips").innerHTML = chipsHTML(r, +a.dataset.n); liveUpdate(); }
 });
 $("body").addEventListener("focusout", e => { if (e.target.tagName === "TEXTAREA") e.target._undoOpen = false; });
 window.addEventListener("resize", () => document.querySelectorAll("#body textarea").forEach(fit));
@@ -840,6 +856,7 @@ function showTab(t){
   else {
     placeVids();
     slots[t].appendChild(rubricBox);
+    fitPanes();
     document.querySelectorAll("#body textarea").forEach(fit);
     applyPos(pos);
   }
@@ -893,7 +910,8 @@ function autoVidH(){
   if (!vid) return;
   const host = vid.closest(".vhost") || vid.closest(".player").parentNode, r = vid.getBoundingClientRect();
   const below = host.getBoundingClientRect().bottom - r.bottom;             /* controls + shortcut hints */
-  const px = Math.round(Math.max(window.innerHeight * 0.6, window.innerHeight - (r.top + window.scrollY) - below - 14));   /* small screens: scroll a little rather than shrink the video */
+  const pad = parseFloat(getComputedStyle(vid.closest(".sbs, .split") || document.body).paddingBottom) || 0;
+  const px = Math.round(Math.max(240, window.innerHeight - (r.top + window.scrollY) - below - pad - 1));   /* fits the screen; drag the edge to make it bigger */
   if (root.style.getPropertyValue("--vidh-auto") !== px + "px") root.style.setProperty("--vidh-auto", px + "px");
 }
 window.addEventListener("resize", () => { clearTimeout(autoVidH._t); autoVidH._t = setTimeout(autoVidH, 100); });
@@ -1074,6 +1092,7 @@ function renderClips(){
   $("srcEmpty").hidden = v.clips.length > 0;
   placeVids();
   updBuffering();
+  liveUpdate();
 }
 $("clipTabs").addEventListener("click", e => {
   const b = e.target.closest("button"); if (!b) return;
@@ -1147,15 +1166,15 @@ function parseTs(txt){
   const m = new RegExp("^\\s*(.+?)\\s+" + T + "(?:\\s*(?:-|–|—|to)\\s*" + T + ")?\\s*$", "i").exec(txt || "");
   if (!m || /\d+:\d{2}/.test(m[1])) return null;
   const secs = t => t.split(":").reduce((a, x) => a * 60 + parseFloat(x), 0);
-  return { name: m[1].trim(), sec: secs(m[2]), range: !!m[3] };
+  return { name: m[1].trim(), sec: secs(m[2]), range: !!m[3], end: m[3] ? secs(m[3]) : null };
 }
 const normName = s => s.toLowerCase().replace(/[^a-z0-9]/g, "").replace(/(\D)0+(\d)/g, "$1$2");   /* "Clip_01" == "Clip 1" */
 const findClip = name => V().clips.find(c => normName(stem(c.name)) === normName(name));
 function flash(t){ note(t); setTimeout(() => { if ($("msg").textContent === t) note(""); }, 6000); }
-function viewSpec(spec){
+function viewSpec(spec, avoid = -1){
   const p = parseTs(spec); if (!p) return;
   const c = findClip(p.name);
-  if (!c && !V().clips.length && cur && parseMegaLink(sc(cur.n, "src"))){ askLoad(spec); return; }
+  if (!c && !V().clips.length && cur && parseMegaLink(sc(cur.n, "src"))){ askLoad(spec, avoid); return; }
   if (!c){
     flash(V().clips.length ? "No source clip matches \"" + p.name + "\". This task's clips: " + V().clips.map(x => stem(x.name)).join(", ") + "."
                            : "This task has no source clips yet. Load them from MEGA or upload them, then try again.");
@@ -1165,20 +1184,20 @@ function viewSpec(spec){
   /* clips open in Side by Side: in the half that isn't showing the rubric (or the one already on Source Clips) */
   if (curTab !== "sbs") showTab("sbs");
   const r = sbsOwner("rubric"), s0 = sbsOwner("src");
-  const h = r >= 0 ? 1 - r : s0 >= 0 ? s0 : 0;
+  const h = avoid >= 0 ? 1 - avoid : r >= 0 ? 1 - r : s0 >= 0 ? s0 : 0;
   V().active = c; sbsPick(h, "src", true); renderClips();
   c.player.seekTo(p.sec);
 }
 
 /* "Load this task's videos?" box shown when a timestamp is clicked before any clips are loaded */
-async function askLoad(spec){
+async function askLoad(spec, avoid = -1, genSec = null){
   if (megaBusy){ flash("This task's videos are still loading. Try the timestamp again in a moment."); return; }
   const dlg = $("askDlg"), t = cur;
   const streaming = await canStream();
   $("askTxt").textContent = "Task " + t.id + "'s videos aren't loaded yet, so this timestamp (" + spec + ") can't be shown. "
     + (streaming ? "Confirm to load its source clips, golden edit and generated video from MEGA. They start playing within a few seconds, and you'll be taken to this moment."
                  : "Confirm to download its source clips, golden edit and generated video from MEGA. Large files can take a while; you'll be taken to this moment when the clips are ready.");
-  dlg._spec = spec; dlg._task = t;
+  dlg._spec = spec; dlg._task = t; dlg._avoid = avoid; dlg._gen = genSec;
   if (dlg.showModal) dlg.showModal(); else dlg.setAttribute("open", "");
   $("askOk").focus();
 }
@@ -1188,7 +1207,9 @@ $("askOk").addEventListener("click", async () => {
   dlg.close();
   if (t !== cur) return;
   const ok = await megaLoad({ preconfirmed: true });
-  if (ok && t === cur && findClip((parseTs(spec) || {}).name || "")) viewSpec(spec);
+  if (!ok || t !== cur) return;
+  if (dlg._gen != null){ if (V().gen) viewGen(dlg._gen, dlg._avoid); }
+  else if (findClip((parseTs(spec) || {}).name || "")) viewSpec(spec, dlg._avoid);
 });
 
 /* ---------- notepads ---------- */
@@ -1655,8 +1676,10 @@ function sbsRender(pos){
   slots.sbs = rubricHalf >= 0 ? sbsBody(rubricHalf) : $("rubricPark");
   autoVidH();
   szApply();
+  fitPanes();
   if (rubricHalf >= 0){ document.querySelectorAll("#body textarea").forEach(fit); applyPos(pos); }
   updBuffering();
+  liveUpdate();
 }
 function sbsSave(){ try { localStorage.setItem(SBS_STORE, JSON.stringify(halves)); } catch (_) {} }
 function sbsPick(h, sel, clips){
@@ -1762,6 +1785,114 @@ $("restoreNo").addEventListener("click", () => { const d = $("restoreDlg"); d.cl
 $("restoreDlg").addEventListener("cancel", e => e.preventDefault());   /* Esc doesn't silently pick one */
 pruneSaves();
 showTab("sbs");      /* the app opens on Side by Side */
+
+/* ---------- live highlights: while a source clip plays, rubric rows whose timestamps cover that moment light up;
+   while the generated video plays, matching "out" moments in Went Well / Went Wrong light up ---------- */
+function liveUpdate(){
+  const v = V(), c = v.active, vid = c && c.host && c.host.querySelector("video");
+  const on = !!(cur && vid && vid.offsetParent && vid.readyState >= 1);
+  const t = on ? vid.currentTime : -1, nm = on ? normName(stem(c.name)) : "";
+  document.querySelectorAll("#body .chip").forEach(ch => {
+    let hit = false;
+    if (on){ const p = parseTs(ch.dataset.t); if (p && normName(p.name) === nm) hit = p.end != null ? (t >= p.sec - 0.05 && t <= p.end + 0.05) : (t >= p.sec - 0.25 && t <= p.sec + 1.5); }
+    if (ch.classList.contains("live") !== hit) ch.classList.toggle("live", hit);
+  });
+  document.querySelectorAll("#body tr").forEach(tr => { const hit = !!tr.querySelector(".chip.live"); if (tr.classList.contains("live") !== hit) tr.classList.toggle("live", hit); });
+  const g = v.gen && v.gen.host && v.gen.host.querySelector("video"), gon = !!(g && g.offsetParent && g.readyState >= 1), gt = gon ? g.currentTime : -1;
+  document.querySelectorAll(".notesview .tslink[data-gen]").forEach(b => { const hit = gon && gt >= +b.dataset.gen - 0.02 && gt < +b.dataset.end;   /* end-exclusive, so back-to-back moments don't both light up */ if (b.classList.contains("live") !== hit) b.classList.toggle("live", hit); });
+}
+["timeupdate", "seeked", "loadedmetadata", "emptied"].forEach(ev => document.addEventListener(ev, e => { if (e.target.tagName === "VIDEO" && e.target !== warmV) liveUpdate(); }, true));
+
+/* ---------- fit the boxes to the screen (every tab but Rubric): each box ends at the bottom of the window and
+   scrolls inside itself, so the page doesn't scroll. Only a box made taller by hand (the video edge, a notes
+   box's corner) can make the page longer. ---------- */
+var FIT_SEL = ".side, .sbsbody.rub, .notes";   /* var: may be used by code that runs before this line */
+function fitPanes(){
+  if (!FIT_SEL) return;
+  const narrow = window.innerWidth <= 960, all = [...document.querySelectorAll(FIT_SEL)];
+  const vis = curTab === "rubric" || narrow ? [] : all.filter(el => el.offsetParent);
+  all.forEach(el => { if (!vis.includes(el) && !el.matches("textarea.notes[hidden], .notesview[hidden]")){ el.style.removeProperty("height"); el.style.removeProperty("max-height"); } });
+  vis.forEach(el => {
+    const pad = parseFloat(getComputedStyle(el.closest(".sbs, .split") || document.body).paddingBottom) || 0;
+    const h = Math.max(160, Math.floor(window.innerHeight - (el.getBoundingClientRect().top + window.scrollY) - pad - 1));
+    if (el.matches(".notes")) el.style.height = h + "px"; else el.style.maxHeight = h + "px";
+  });
+}
+window.addEventListener("resize", () => { clearTimeout(fitPanes._t); fitPanes._t = setTimeout(() => { autoVidH(); fitPanes(); }, 120); });
+if (window.ResizeObserver){ const ro = new ResizeObserver(() => { autoVidH(); fitPanes(); }); ro.observe(document.querySelector("header")); ro.observe($("taskbar")); }
+
+/* ---------- clickable timestamps in Multi-Take Moments, Went Well and Went Wrong ----------
+   The notes show as text with links: "out 4.00-6.20s" style times open the generated video at that moment,
+   "Clip 3 0:55.20-0:57.40" opens that source clip. Clicking anywhere else edits the text right there. */
+var LINKED = ["notesMulti", "notesGood", "notesBad"];
+const NOTE_RE = /(Clip\s*\d+\s+(?:\d+:)?\d+:[0-5]\d(?:\.\d{1,3})?(?:\s*(?:-|–|—|to)\s*(?:\d+:)?\d+:[0-5]\d(?:\.\d{1,3})?)?)|(?<![\d:.])(\d{1,4}\.\d{1,3})\s*-\s*(\d{1,4}\.\d{1,3})s?(?![\d:.])/gi;
+function renderNoteView(ta){
+  const view = ta._view, txt = ta.value; if (!view) return;
+  let html = "", last = 0;
+  txt.replace(NOTE_RE, (m, clip, a, b, off) => {
+    html += esc(txt.slice(last, off));
+    html += clip
+      ? '<span role="button" tabindex="0" class="tslink" data-spec="' + escA(clip.replace(/\s+/g, " ")) + '" title="Show this moment in the source clip">' + esc(m) + '</span>'
+      : '<span role="button" tabindex="0" class="tslink" data-gen="' + a + '" data-end="' + b + '" title="Show this moment in the generated video">' + esc(m) + '</span>';   /* spans, so a link can wrap like the text around it */
+    last = off + m.length; return m;
+  });
+  html += esc(txt.slice(last));
+  view.innerHTML = txt ? html : '<span class="ph">' + esc(ta.placeholder) + '</span>';
+}
+function renderNoteViews(){ if (!LINKED) return; LINKED.forEach(id => { const ta = $(id); if (ta.hidden) renderNoteView(ta); }); liveUpdate(); }
+function caretOffset(view, x, y){
+  if (view.querySelector(".ph")) return 0;
+  let node = null, off = 0;
+  if (document.caretPositionFromPoint){ const p = document.caretPositionFromPoint(x, y); if (p){ node = p.offsetNode; off = p.offset; } }
+  else if (document.caretRangeFromPoint){ const r = document.caretRangeFromPoint(x, y); if (r){ node = r.startContainer; off = r.startOffset; } }
+  if (!node || !view.contains(node)) return null;
+  try { const r = document.createRange(); r.setStart(view, 0); r.setEnd(node, off); return r.toString().length; } catch (_) { return null; }
+}
+const halfOf = el => { const h = el.closest(".sbshalf"); return h && curTab === "sbs" ? +h.dataset.h : -1; };
+function viewGen(sec, avoid = -1){
+  const g = V().gen;
+  if (!g){
+    if (cur && parseMegaLink(sc(cur.n, "gen"))){ askLoad(fmt(sec) + " in the generated video", avoid, sec); return; }
+    flash("This task has no generated video yet. Load it from MEGA or upload it, then try again."); return;
+  }
+  note("");
+  if (curTab !== "sbs") showTab("sbs");
+  const o = sbsOwner("gen"), r = sbsOwner("rubric");
+  const h = avoid >= 0 ? 1 - avoid : o >= 0 ? o : r >= 0 ? 1 - r : 0;
+  if (sbsOwner("gen") !== h) sbsPick(h, "gen");
+  g.player.seekTo(sec);
+}
+LINKED.forEach(id => {
+  const ta = $(id), view = document.createElement("div");
+  view.className = "notes solo notesview"; view.tabIndex = 0; view.setAttribute("role", "textbox"); view.setAttribute("aria-label", ta.labels && ta.labels[0] ? ta.labels[0].textContent : "Notes");
+  ta.after(view); ta._view = view; ta.hidden = true;
+  const edit = off => {
+    if (view.style.height) ta.style.height = view.style.height;
+    const st = view.scrollTop;
+    ta.hidden = false; view.hidden = true;
+    ta.focus({ preventScroll: true });
+    if (off != null) ta.setSelectionRange(off, off); else ta.scrollTop = st;
+  };
+  view.addEventListener("click", e => {
+    const b = e.target.closest(".tslink");
+    if (b){ if (b.dataset.spec) viewSpec(b.dataset.spec, halfOf(view)); else viewGen(+b.dataset.gen, halfOf(view)); return; }
+    const sel = window.getSelection(); if (sel && !sel.isCollapsed && view.contains(sel.anchorNode)) return;   /* selecting text to copy */
+    edit(caretOffset(view, e.clientX, e.clientY));
+  });
+  view.addEventListener("keydown", e => {
+    if (e.target.classList.contains("tslink") && (e.key === "Enter" || e.key === " ")){ e.preventDefault(); e.target.click(); return; }
+    if (e.target === view && (e.key === "Enter" || e.key === "F2")){ e.preventDefault(); edit(ta.value.length); }
+  });
+  ta.addEventListener("blur", () => {
+    renderNoteView(ta);
+    if (ta.style.height) view.style.height = ta.style.height;
+    const st = ta.scrollTop;
+    ta.hidden = true; view.hidden = false; view.scrollTop = st;
+    liveUpdate();
+  });
+  renderNoteView(ta);
+});
+fitPanes();
 
 </script>
 </body>
