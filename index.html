@@ -71,6 +71,7 @@ td.id textarea{color:#d4a72c;font-weight:600}
 .player{background:#000;border-radius:10px;overflow:hidden;border:1px solid var(--line)}
 .player video{display:block;width:100%;max-height:68vh;background:#000;cursor:pointer}
 .perr{padding:14px;background:var(--panel);color:#e5534b;font-size:14px}
+.perr .btn{margin-left:6px;vertical-align:middle}
 .ctl{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:10px 12px;background:var(--panel);color:var(--fg)}
 .ctl button{all:unset;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:8px}
 .ctl button:hover{background:var(--btn)}
@@ -889,7 +890,13 @@ function makePlayer(host, url, name, copyPrefix = ""){
   const tipEl = document.createElement("div");
   tipEl.className = "seektip"; tipEl.hidden = true; document.body.appendChild(tipEl);
   v.src = url;
-  const upd = () => { ts.textContent = fmt(v.currentTime); if (!drag) seek.value = v.currentTime; };
+  /* Seeks are coalesced: while one is still in progress only the newest target is kept, and it is applied when the
+     current seek finishes. Dragging fast or holding A/D then can't swamp the decoder with hundreds of seeks. */
+  let pendT = null;
+  const here = () => pendT != null ? pendT : v.currentTime;
+  const goTo = t => { if (v.seeking){ pendT = t; } else { pendT = null; v.currentTime = t; } };
+  v.addEventListener("seeked", () => { if (pendT != null){ const t = pendT; pendT = null; if (Math.abs(t - v.currentTime) > 0.0005) v.currentTime = t; } });
+  const upd = () => { const t = here(); ts.textContent = fmt(t); if (!drag) seek.value = t; };
   const loop = () => { upd(); raf = requestAnimationFrame(loop); };
   const setIcon = playing => { pp.innerHTML = playing ? ICON.pause : ICON.play; pp.setAttribute("aria-label", playing ? "Pause" : "Play"); };
   const toggle = () => { if (v.paused){ const r = v.play(); if (r && r.catch) r.catch(() => {}); } else v.pause(); };
@@ -901,12 +908,47 @@ function makePlayer(host, url, name, copyPrefix = ""){
   });
   v.addEventListener("seeked", upd);
   v.addEventListener("timeupdate", () => { if (v.paused) upd(); });
-  v.addEventListener("error", async () => {
+  /* A video can stop with an error after very fast scrubbing (the browser's decoder gives up), and MEGA streams can
+     also drop. If the video had been playing fine, reload it on our own, keeping the spot and play state; after a few
+     tries in a row, show the problem with a Reload video button. */
+  const isMega = url.startsWith("/mega-stream/");
+  let lastT = 0, resumePlay = false, fails = [], reloading = false, everLoaded = false;
+  v.addEventListener("loadedmetadata", () => { everLoaded = true; });
+  const keepSpot = () => { if (!v.error && v.readyState >= 1) lastT = here(); };
+  v.addEventListener("seeking", keepSpot); v.addEventListener("timeupdate", keepSpot);
+  v.addEventListener("play", () => { resumePlay = true; }); v.addEventListener("pause", () => { if (!v.error) resumePlay = false; });
+  const reload = () => {
+    reloading = true;
+    const t = lastT, go = resumePlay; pendT = null;
+    err.hidden = false; err.textContent = "Reconnecting to MEGA…";
+    v.removeAttribute("src"); v.load();
+    v.src = isMega ? url + "?r=" + Date.now() : url;   /* a fresh request (the MEGA worker ignores the query) */
+    v.addEventListener("loadedmetadata", () => {
+      reloading = false;
+      if (t) goTo(Math.min(t, (v.duration || t) - 0.05));
+      if (v.videoWidth){ err.hidden = true; err.textContent = ""; }
+      if (go){ const r = v.play(); if (r && r.catch) r.catch(() => {}); }
+    }, { once: true });
+  };
+  const showErr = async () => {
     err.hidden = false;
     err.textContent = "This browser can't play " + name + ". It may use a format like ProRes or HEVC. Convert it to MP4 (H.264) or WebM.";
-    if (url.startsWith("/mega-stream/")){
-      try { const r = await fetch(url, { headers: { Range: "bytes=0-0" } }); if (!r.ok) err.textContent = "Couldn't stream " + name + " from MEGA: " + (await r.text()).slice(0, 200); } catch (_) {}
+    let why = "";
+    if (isMega){ try { const r = await fetch(url, { headers: { Range: "bytes=0-0" } }); if (!r.ok) why = "Couldn't stream " + name + " from MEGA: " + (await r.text()).slice(0, 200); } catch (e) { why = "Couldn't reach MEGA: " + String(e.message || e); } }
+    if (!why && everLoaded) why = name + " stopped playing.";
+    if (!why) return;                                   /* it never played: a format problem */
+    err.innerHTML = "";
+    const msg = document.createElement("span"); msg.textContent = why + " ";
+    const b = document.createElement("button"); b.className = "btn o-blue"; b.type = "button"; b.textContent = "Reload video";
+    b.addEventListener("click", () => { fails = []; reload(); });
+    err.append(msg, b);
+  };
+  v.addEventListener("error", () => {
+    if (everLoaded || isMega){
+      const now = Date.now(); fails = fails.filter(x => now - x < 60000); fails.push(now);
+      if (fails.length <= 3){ setTimeout(reload, 300 * fails.length); return; }
     }
+    reloading = false; showErr();
   });
   pp.addEventListener("click", toggle);
   v.addEventListener("click", toggle);
@@ -920,7 +962,7 @@ function makePlayer(host, url, name, copyPrefix = ""){
     tipEl.style.left = e.clientX + "px"; tipEl.style.top = (e.clientY - 14) + "px"; tipEl.hidden = false;
   });
   seek.addEventListener("mouseleave", () => { tipEl.hidden = true; });
-  seek.addEventListener("input", () => { v.currentTime = +seek.value; ts.textContent = fmt(v.currentTime); });
+  seek.addEventListener("input", () => { goTo(+seek.value); ts.textContent = fmt(+seek.value); });
   ts.addEventListener("click", () => copyText((copyPrefix ? copyPrefix + " " : "") + ts.textContent, tip));
   mute.addEventListener("click", () => { audio.m = !audio.m; syncAudio(); });
   vol.addEventListener("input", () => { audio.v = +vol.value; audio.m = audio.v === 0; syncAudio(); });
@@ -933,12 +975,12 @@ function makePlayer(host, url, name, copyPrefix = ""){
       const go = () => {
         v.pause();
         const end = isFinite(v.duration) ? v.duration : Infinity;
-        v.currentTime = Math.min(end, Math.max(0, t)); upd();
+        goTo(Math.min(end, Math.max(0, t))); upd();
         if (t > end + 0.001){ tip.textContent = "Past end of clip"; clearTimeout(tip._t); tip._t = setTimeout(() => { tip.textContent = ""; }, 4000); }
       };
       if (v.readyState >= 1) go(); else v.addEventListener("loadedmetadata", go, { once: true });
     },
-    seekBy(d){ const end = isFinite(v.duration) ? v.duration : Infinity; v.currentTime = Math.min(end, Math.max(0, v.currentTime + d)); upd(); },
+    seekBy(d){ const end = isFinite(v.duration) ? v.duration : Infinity; goTo(Math.min(end, Math.max(0, here() + d))); upd(); },
     syncAudio(){ v.volume = audio.v; v.muted = audio.m; vol.value = audio.m ? 0 : audio.v; mute.innerHTML = (audio.m || audio.v === 0) ? ICON.mute : ICON.vol; mute.setAttribute("aria-label", audio.m ? "Unmute" : "Mute"); },
     destroy(){ tipEl.remove(); cancelAnimationFrame(raf); v.pause(); v.removeAttribute("src"); v.load(); players.delete(api); host.innerHTML = ""; }
   };
