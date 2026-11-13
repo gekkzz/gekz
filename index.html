@@ -114,6 +114,7 @@ td::before{display:none}
 .notes{height:calc(100vh - 250px);min-height:260px;overflow:auto;resize:vertical;border-color:var(--line);background:var(--panel);padding:12px;line-height:1.5}
 .notes.solo{height:calc(100vh - 180px)}
 .nhead.top{margin-top:0}
+.sbsbody #notesBad{height:calc(100vh - 230px)}
 .btn.sq{padding:3px 12px;min-width:38px;text-align:center;font-size:18px;line-height:1.25}
 #pfsVal{min-width:46px;text-align:center}
 td.c-view{display:none}
@@ -382,7 +383,7 @@ td.id{width:64px}
 
 <section id="p-bad" hidden>
   <div class="split">
-    <div class="stage">
+    <div class="stage" id="badStage">
       <div class="nhead top"><label for="notesBad">Went Wrong</label>
         <span class="nact"><span class="tip" id="btip" aria-live="polite"></span><button class="btn" id="bcopy">Copy to clipboard</button></span></div>
       <textarea id="notesBad" class="notes solo" spellcheck="false" placeholder="Write what the model could have done better (column T)"></textarea>
@@ -1450,7 +1451,8 @@ $("body").addEventListener("input", tcStaleCheck);
 $("body").addEventListener("click", () => setTimeout(tcStaleCheck));
 
 /* ---------- Side by Side: two halves, each showing the rubric, a source clip, the golden edit or the generated video ---------- */
-const SBS_ITEMS = [["src", "Source Clips"], ["gold", "Golden Edit"], ["gen", "Generated Video"], ["rubric", "Rubric"]];
+const SBS_ITEMS = [["src", "Source Clips"], ["gold", "Golden Edit"], ["gen", "Generated Video"], ["rubric", "Rubric"], ["bad", "Went Wrong"]];
+const SBS_NAME = { rubric: "The rubric", src: "The source clip", gold: "The golden edit", gen: "The generated video", bad: "Went Wrong" };
 const SBS_EMPTY = { src: "No source clips for this task yet. Use Load videos from MEGA, or Upload Source Clips.",
   gold: "No golden edit for this task yet. Use Load videos from MEGA, or Upload Golden Edit.",
   gen: "No generated video for this task yet. Use Load videos from MEGA, or Upload Generated." };
@@ -1468,7 +1470,10 @@ function sbsOwner(sel){
 const hostOf = (v, sel) => sel === "src" ? (v.active && v.active.host) : sel === "gold" || sel === "gen" ? (v[sel] && v[sel].host) : null;
 const playerOf = (v, sel) => sel === "src" ? (v.active && v.active.player) : sel === "gold" || sel === "gen" ? (v[sel] && v[sel].player) : null;
 function moveTo(el, parent, before){ if (el && el.parentNode !== parent) parent.insertBefore(el, before || null); }
+/* the Went Wrong notepad (with its Copy button) lives on its own tab unless a Side by Side half shows it */
+function badHome(){ moveTo($("badStage"), $("slotBad").parentNode, $("slotBad")); }
 function sendHome(v){
+  badHome();
   v.clips.forEach(c => moveTo(c.host, $("clipStage")));
   ["gold", "gen"].forEach(k => { if (v[k]) moveTo(v[k].host, $(STAGE[k])); });
 }
@@ -1535,14 +1540,15 @@ function sbsRender(pos){
   const v = V();
   /* what each half shows */
   const want = new Map();     /* element -> half */
-  let rubricHalf = -1;
+  let rubricHalf = -1, badHalf = -1;
   [0, 1].forEach(h => {
     const s = halves[h].sel, body = sbsBody(h), noteEl = body.querySelector(".sbsnote");
     $("sbsBar" + h).innerHTML = sbsBar(h);
     body.classList.toggle("rub", s === "rubric" && sbsOwner(s) === h);
     let msg = "";
-    if (sbsOwner(s) !== h) msg = (s === "rubric" ? "The rubric" : s === "src" ? "The source clip" : s === "gold" ? "The golden edit" : "The generated video") + " is showing on the " + (h ? "left" : "right") + ".";
+    if (sbsOwner(s) !== h) msg = SBS_NAME[s] + " is showing on the " + (h ? "left" : "right") + ".";
     else if (s === "rubric") rubricHalf = h;
+    else if (s === "bad") badHalf = h;
     else { const el = hostOf(v, s); if (el) want.set(el, h); else msg = !sheet ? (sbsOwner("rubric") < 0 && h === 0 ? $("empty").textContent : "") : SBS_EMPTY[s]; }   /* before a CSV: the welcome text shows once */
     noteEl.textContent = msg; noteEl.hidden = !msg;
   });
@@ -1552,6 +1558,8 @@ function sbsRender(pos){
   want.forEach((h, el) => { moveTo(el, sbsBody(h), sbsBody(h).querySelector(".sbsnote")); el.hidden = false; });
   if (rubricHalf >= 0) moveTo(rubricBox, sbsBody(rubricHalf), sbsBody(rubricHalf).querySelector(".sbsnote"));
   else moveTo(rubricBox, $("rubricPark"));
+  if (badHalf >= 0) moveTo($("badStage"), sbsBody(badHalf), sbsBody(badHalf).querySelector(".sbsnote"));
+  else badHome();
   slots.sbs = rubricHalf >= 0 ? sbsBody(rubricHalf) : $("rubricPark");
   szApply();
   if (rubricHalf >= 0){ document.querySelectorAll("#body textarea").forEach(fit); applyPos(pos); }
