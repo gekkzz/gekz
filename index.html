@@ -231,6 +231,7 @@ tr.flashrow{outline:2px solid #7cc4ff;outline-offset:-2px}
 textarea.notes[hidden],.notesview[hidden]{display:none !important}
 @keyframes rowflash{from{background:rgba(56,139,253,.22)}to{background:transparent}}
 #rubricBox:not(.compact) #body tr.jumped > td,#rubricBox.compact #body tr.jumped{animation:rowflash 1.5s ease-out}
+.scoreV.sc-low{color:#3fb950}.scoreV.sc-mid{color:#d29922}.scoreV.sc-high{color:#f85149}
 .saveind{opacity:.8}.saveind.err{color:#e5534b;opacity:1}
 
 .compact tr.hasview .tscopy{all:unset;display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:6px;cursor:pointer;color:var(--mut)}
@@ -700,9 +701,12 @@ function draw(){
 }
 
 function score(){
-  if (!cur){ document.querySelectorAll(".scoreV").forEach(el => { el.textContent = "\u2014"; }); document.querySelectorAll(".subV").forEach(el => { el.textContent = ""; }); $("sheetSc").textContent = ""; return; }
+  if (!cur){ document.querySelectorAll(".scoreV").forEach(el => { el.textContent = "\u2014"; el.classList.remove("sc-low", "sc-mid", "sc-high"); }); document.querySelectorAll(".subV").forEach(el => { el.textContent = ""; }); $("sheetSc").textContent = ""; return; }
   const s = scoreOf(cur), pct = s.pct == null ? "\u2014" : s.pct.toFixed(2) + "%";
-  document.querySelectorAll(".scoreV").forEach(el => { el.textContent = pct; });
+  /* score colour: up to 65% green, 65.01-69.99% yellow, 70% and up red (judged on the 2-decimal score shown) */
+  const v = s.pct == null ? null : Math.round(s.pct * 100) / 100;
+  const band = v == null ? "" : v <= 65 ? "sc-low" : v < 70 ? "sc-mid" : "sc-high";
+  document.querySelectorAll(".scoreV").forEach(el => { el.textContent = pct; el.classList.remove("sc-low", "sc-mid", "sc-high"); if (band) el.classList.add(band); });
   document.querySelectorAll(".subV").forEach(el => { el.textContent = s.graded + " of " + s.total + " graded"; });
   const sheetPct = sc(cur.n, "score").trim();
   $("sheetSc").textContent = sheetPct && sheetPct !== pct ? "sheet says " + sheetPct : "";
