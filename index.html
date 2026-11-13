@@ -5,7 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Rubric reviewer v2</title>
 <style>
-:root{--bg:#1b1d1f;--panel:#202326;--line:#2c2f33;--fg:#f1f2f3;--mut:#9aa0a6;--pass:#2f6b1f;--fail:#7a0f10;--btn:#2a2d31}
+/* dark theme: a slightly deeper, warmer palette with clearer borders (matched to how Dark Reader showed the app) */
+:root{--bg:#161819;--panel:#1a1d1e;--line:#7c7366;--fg:#e0ddd9;--mut:#aca59a;--pass:#265619;--fail:#620c0d;--btn:#222527}
 @media (prefers-color-scheme:light){:root{--bg:#fafafa;--panel:#fff;--line:#dfe1e4;--fg:#1c1e21;--mut:#5f6368;--btn:#eceef0}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.35 system-ui,-apple-system,"Segoe UI",sans-serif}
@@ -232,6 +233,22 @@ textarea.notes[hidden],.notesview[hidden]{display:none !important}
 @keyframes rowflash{from{background:rgba(56,139,253,.22)}to{background:transparent}}
 #rubricBox:not(.compact) #body tr.jumped > td,#rubricBox.compact #body tr.jumped{animation:rowflash 1.5s ease-out}
 .scoreV.sc-low{color:#3fb950}.scoreV.sc-mid{color:#d29922}.scoreV.sc-high{color:#f85149}
+@media not all and (prefers-color-scheme:light){
+  .sub.on{border-color:#2b963f}
+  .btn.o-green,.btn.o-green:hover{border-color:#2b963f}
+  .btn.o-blue,.btn.o-blue:hover{border-color:#004e8d}
+  .btn.o-cyan{border-color:#004e8d}
+  .btn.o-cyan.ready{border-color:#2b963f}
+  .sbsnote .megaload{border-color:#004e8d}
+  .btn.o-yellow,.btn.o-yellow:hover{border-color:#93721e}
+  .chip{border-color:#245797}
+  .del{border-color:#94291f}
+  td.id textarea{color:#d8b041}
+  .kindb.I{color:#57c667;border-color:#3e8f4e}
+  .kindb.E{color:#f39a5c;border-color:#9a6430}
+  .rfilter button.on{border-color:#2b963f}
+  .player{border-color:#7c7366}
+}
 .saveind{opacity:.8}.saveind.err{color:#e5534b;opacity:1}
 
 .compact tr.hasview .tscopy{all:unset;display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:6px;cursor:pointer;color:var(--mut)}
