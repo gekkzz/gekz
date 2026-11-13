@@ -179,10 +179,15 @@ tr.flashrow{outline:2px solid #7cc4ff;outline-offset:-2px}
 .sbsbody.rub{position:sticky;top:12px;max-height:calc(100vh - 24px);overflow:auto;border:1px solid var(--line);border-radius:10px;background:var(--panel)}
 .sbsnote{padding:48px 18px;text-align:center;color:var(--mut);border:1px dashed var(--line);border-radius:10px}
 .sbsnote[hidden]{display:none}
+.sbsnote .megaload{margin:14px 0 8px}
+.sbsnote .sbsalt{font-size:12.5px;opacity:.8}
 @media (max-width:960px){.sbs{grid-template-columns:minmax(0,1fr)}}
 .vhost:not([hidden]){display:flex;flex-direction:column}
 .vhost .vname{display:none}   /* file name under the player hidden */
 .sbsbar .sub.szc{margin-left:auto}
+.sbsbar .sbstip{margin-left:auto;align-self:center;min-width:0}
+.sbsbar .sbstip + .sub.szc{margin-left:0}
+.sbsbody #badStage > .nhead{display:none}   /* in Side by Side the half's button already says Went Wrong; Copy sits in the button row */
 .player{position:relative}
 .szo{position:absolute;pointer-events:none;z-index:2}
 .szo svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
@@ -1329,6 +1334,9 @@ function setMegaBtn(){
   const st = (cur && cur.mega) || "idle", b = $("megaBtn");
   b.textContent = MEGA_LABEL[st]; b.disabled = st !== "idle"; b.classList.toggle("ready", st === "ready");
   b.title = st === "ready" ? "This task's videos are loaded" : st === "loading" ? "Loading this task's videos from MEGA" : "Load this task's videos from the MEGA links in the sheet";
+  /* the same button inside empty Side by Side halves */
+  document.querySelectorAll(".sbsnote .megaload").forEach(x => { x.textContent = MEGA_LABEL[st]; x.disabled = st !== "idle"; });
+  if (st !== "loading" && curTab === "sbs" && document.querySelector(".sbsnote .megaload")) sbsRender();
 }
 /* loads the current task's videos; resolves true when they're ready to play */
 async function megaLoad(opts = {}){
@@ -1570,6 +1578,16 @@ const SBS_NAME = { rubric: "The rubric", src: "The source clip", gold: "The gold
 const SBS_EMPTY = { src: "No source clips for this task yet. Use Load videos from MEGA, or Upload Source Clips.",
   gold: "No golden edit for this task yet. Use Load videos from MEGA, or Upload Golden Edit.",
   gen: "No generated video for this task yet. Use Load videos from MEGA, or Upload Generated." };
+/* when the sheet has a MEGA link for it, an empty half offers the load right there */
+const SBS_EMPTY_SHORT = { src: ["No source clips for this task yet.", "Upload Source Clips"],
+  gold: ["No golden edit for this task yet.", "Upload Golden Edit"], gen: ["No generated video for this task yet.", "Upload Generated"] };
+function sbsEmptyHTML(s){
+  const st = (cur && cur.mega) || "idle";
+  if (!cur || st === "ready" || !parseMegaLink(sc(cur.n, s))) return esc(SBS_EMPTY[s]);
+  const [line, up] = SBS_EMPTY_SHORT[s];
+  return '<div>' + esc(line) + '</div><button class="btn o-blue megaload" type="button"' + (st !== "idle" ? " disabled" : "") + '>' + esc(MEGA_LABEL[st]) + '</button>'
+    + '<div class="sbsalt">or use ' + esc(up) + ' at the top</div>';
+}
 const SBS_STORE = "rr-sbs-layout-v2";
 let halves = [{ sel: "gen", mode: "main", at: 1 }, { sel: "rubric", mode: "main", at: 2 }];   /* first visit: generated left, rubric right */
 try { const j = JSON.parse(localStorage.getItem(SBS_STORE) || "null");
@@ -1610,7 +1628,9 @@ function sbsBar(h){
       + btn(" back", 'data-back="1"', "Back", false);
   return SBS_ITEMS.map(([k, label]) => btn("", `data-sel="${k}"`, k === "src" && v.clips.length ? label + " (" + v.clips.length + ")" : label, half.sel === k)).join("")
     + ((half.sel === "gold" || half.sel === "gen") && v[half.sel] && sbsOwner(half.sel) === h
-       ? btn(" szc", 'data-sz="1" title="Outline the Instagram Reels safe zone on the video"', "Safe Zone Checker", safeZone) : "");
+       ? btn(" szc", 'data-sz="1" title="Outline the Instagram Reels safe zone on the video"', "Safe Zone Checker", safeZone) : "")
+    + (half.sel === "bad" && sbsOwner("bad") === h
+       ? '<span class="tip sbstip" aria-live="polite"></span>' + btn(" szc", 'data-copybad="1" title="Copy the Went Wrong notes"', "Copy", false) : "");
 }
 
 /* ---------- Safe Zone Checker: Instagram Reels safe area drawn over the golden edit / generated video ----------
@@ -1663,8 +1683,10 @@ function sbsRender(pos){
     if (sbsOwner(s) !== h) msg = SBS_NAME[s] + " is showing on the " + (h ? "left" : "right") + ".";
     else if (s === "rubric") rubricHalf = h;
     else if (s === "bad") badHalf = h;
-    else { const el = hostOf(v, s); if (el) want.set(el, h); else msg = !sheet ? (sbsOwner("rubric") < 0 && h === 0 ? $("empty").textContent : "") : SBS_EMPTY[s]; }   /* before a CSV: the welcome text shows once */
-    noteEl.textContent = msg; noteEl.hidden = !msg;
+    let html = null;
+    if (sbsOwner(s) === h && s !== "rubric" && s !== "bad" && !hostOf(v, s) && sheet) html = sbsEmptyHTML(s);
+    else if (sbsOwner(s) === h && s !== "rubric" && s !== "bad"){ const el = hostOf(v, s); if (el) want.set(el, h); else msg = !sheet ? (sbsOwner("rubric") < 0 && h === 0 ? $("empty").textContent : "") : SBS_EMPTY[s]; }   /* before a CSV: the welcome text shows once */
+    if (html != null){ noteEl.innerHTML = html; noteEl.hidden = false; } else { noteEl.textContent = msg; noteEl.hidden = !msg; }
   });
   /* videos not shown in a half go back to their own tabs (moving a video pauses it, so only move what changes) */
   v.clips.forEach(c => { if (!want.has(c.host)) moveTo(c.host, $("clipStage")); });
@@ -1695,6 +1717,8 @@ function sbsPick(h, sel, clips){
 [0, 1].forEach(h => {
   $("sbsBar" + h).addEventListener("click", e => {
     const b = e.target.closest("button"); if (!b) return;
+    if (b.dataset.copybad){ const t = $("notesBad").value.replace(/\s+$/, ""), tip = b.closest(".sbsbar").querySelector(".sbstip");
+      if (t) copyText(t, tip); else { tip.textContent = "Nothing to copy"; clearTimeout(tip._t); tip._t = setTimeout(() => { tip.textContent = ""; }, 1300); } return; }
     if (b.dataset.sz){ safeZone = !safeZone; try { localStorage.setItem("rr-safezone", safeZone ? "1" : "0"); } catch (_) {} sbsRender(); return; }
     if (b.dataset.back){ halves[h].mode = "main"; sbsFocus = h; sbsSave(); sbsRender(); return; }   /* Source Clips stays picked */
     if (b.dataset.clip != null){
@@ -1705,6 +1729,7 @@ function sbsPick(h, sel, clips){
   });
 });
 document.querySelectorAll(".sbshalf").forEach(el => el.addEventListener("pointerdown", () => { sbsFocus = +el.dataset.h; }, true));
+document.querySelectorAll(".sbsnote").forEach(el => el.addEventListener("click", e => { if (e.target.closest(".megaload") && !e.target.disabled) megaLoad(); }));
 
 /* ---------- autosave: edits kept in this browser only (localStorage), keyed to the exact CSV loaded ---------- */
 const SAVE_PREFIX = "rr-autosave:", SAVE_KEEP_DAYS = 14, SAVE_DELAY = 800;
