@@ -1047,12 +1047,14 @@ function makePlayer(host, url, name, copyPrefix = ""){
     playing: () => !v.paused,
     /* only the player on screen buffers ahead; the rest keep just their basic info */
     setBuffer(on){ const want = on ? "auto" : "metadata"; if (v.preload !== want) v.preload = want; },
-    seekTo(t){
+    seekTo(t, play = false){
       const go = () => {
         v.pause();
+        if (play) players.forEach(p => { if (p !== api) p.pause(); });   /* only one video plays at a time */
         const end = isFinite(v.duration) ? v.duration : Infinity;
         goTo(Math.min(end, Math.max(0, t))); upd();
         if (t > end + 0.001){ tip.textContent = "Past end of clip"; clearTimeout(tip._t); tip._t = setTimeout(() => { tip.textContent = ""; }, 4000); }
+        else if (play){ const r = v.play(); if (r && r.catch) r.catch(() => {}); }   /* the browser may refuse if the click was too long ago (e.g. after a slow load); it then just stays paused */
       };
       if (v.readyState >= 1) go(); else v.addEventListener("loadedmetadata", go, { once: true });
     },
@@ -1194,7 +1196,7 @@ function viewSpec(spec, avoid = -1){
   const r = sbsOwner("rubric"), s0 = sbsOwner("src");
   const h = avoid >= 0 ? 1 - avoid : r >= 0 ? 1 - r : s0 >= 0 ? s0 : 0;
   V().active = c; sbsPick(h, "src", true); renderClips();
-  c.player.seekTo(p.sec);
+  c.player.seekTo(p.sec, true);   /* timestamps start playing from that moment */
 }
 
 /* "Load this task's videos?" box shown when a timestamp is clicked before any clips are loaded */
@@ -1890,7 +1892,7 @@ function viewGen(sec, avoid = -1){
   const o = sbsOwner("gen"), r = sbsOwner("rubric");
   const h = avoid >= 0 ? 1 - avoid : o >= 0 ? o : r >= 0 ? 1 - r : 0;
   if (sbsOwner("gen") !== h) sbsPick(h, "gen");
-  g.player.seekTo(sec);
+  g.player.seekTo(sec, true);
 }
 /* a quick glide (about a third of a second, however far) instead of the browser's slower smooth scroll;
    any wheel, touch or key from the person stops it */
