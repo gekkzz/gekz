@@ -1759,6 +1759,9 @@ function sbsRender(pos){
   fitPanes();
   if (rubricHalf >= 0){ document.querySelectorAll("#body textarea").forEach(fit); applyPos(pos); }
   updBuffering();
+  /* a video still showing keeps playing (and still stops at the end of its range); any that left the screen pause */
+  const vis = sbsPlayers();
+  players.forEach(p => { if (p.playing() && !vis.includes(p)) p.pause(); });
   liveUpdate();
 }
 function sbsSave(){ try { localStorage.setItem(SBS_STORE, JSON.stringify(halves)); } catch (_) {} }
@@ -1768,8 +1771,7 @@ function sbsPick(h, sel, clips){
   halves[h].sel = sel; if (!(was === sel && wasOwner)) halves[h].at = ++sbsClock;
   halves[h].mode = sel === "src" && clips ? "clips" : "main";
   sbsFocus = h;
-  players.forEach(p => p.pause());
-  sbsSave(); sbsRender(pos);
+  sbsSave(); sbsRender(pos);   /* sbsRender pauses only the videos that leave the screen */
 }
 [0, 1].forEach(h => {
   $("sbsBar" + h).addEventListener("click", e => {
