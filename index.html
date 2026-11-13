@@ -188,11 +188,12 @@ tr.flashrow{outline:2px solid #7cc4ff;outline-offset:-2px}
 .szo svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
 #tcRun{display:none}   /* Test Against Rubric hidden for now: delete this line to bring the button back */
 /* live rubric rows / moments while a video plays */
-#body tr.live > td{background:rgba(56,139,253,.10)}
 #body tr.live > td:first-child{box-shadow:inset 3px 0 0 #388bfd}
-#rubricBox.compact #body tr.live{background:rgba(56,139,253,.10);box-shadow:inset 3px 0 0 #388bfd}
-#rubricBox.compact #body tr.live > td{background:none;box-shadow:none}
-.chip.live{background:#2c6ab8;color:#fff}
+#rubricBox.compact #body tr.live{box-shadow:inset 3px 0 0 #388bfd}
+#rubricBox.compact #body tr.live > td{box-shadow:none}
+/* the boxes that hold the compact rubric draw their left edge as part of the background, so a live row's blue
+   line sits right on top of that edge instead of 1px inside it */
+.side,.sbsbody.rub{border-left-width:0;background:linear-gradient(var(--line),var(--line)) left top/1px 100% no-repeat,var(--panel)}
 /* notes with clickable timestamps: shown as text with links; click anywhere else to edit */
 .notesview{white-space:pre-wrap;overflow-wrap:anywhere;cursor:text;border:1px solid var(--line);border-radius:8px;color:var(--fg);font:inherit;font-size:14px}
 .notesview .ph{color:var(--mut)}
