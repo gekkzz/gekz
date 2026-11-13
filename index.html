@@ -71,9 +71,12 @@ td.id textarea{color:#d4a72c;font-weight:600}
 .player{background:#000;border-radius:10px;overflow:hidden;border:1px solid var(--line)}
 .player video{display:block;width:100%;max-height:var(--vidh, var(--vidh-auto, calc(100vh - 285px)));min-height:120px;background:#000;cursor:pointer}
 /* drag the bottom edge of the picture to make every player taller or shorter (double-click to reset) */
-.vgrip{height:10px;margin-top:-5px;position:relative;z-index:3;cursor:ns-resize;touch-action:none;display:flex;align-items:center;justify-content:center}
-.vgrip::after{content:"";width:44px;height:4px;border-radius:2px;background:rgba(255,255,255,.28);transition:background .15s}
-.vgrip:hover::after,.vgrip.drag::after{background:rgba(255,255,255,.7)}
+/* the bottom border of the player box is the handle: a 14px strip centred on the border line */
+.vgrip{height:14px;margin:-7px 0 -7px;position:relative;z-index:3;cursor:ns-resize;touch-action:none;display:flex;align-items:center;justify-content:center}
+.vgrip::before{content:"";position:absolute;left:10px;right:10px;top:6px;height:2px;border-radius:1px;background:transparent;transition:background .15s}
+.vgrip::after{content:"";position:relative;width:44px;height:4px;border-radius:2px;background:var(--line);transition:background .15s}
+.vgrip:hover::before,.vgrip.drag::before{background:rgba(120,170,255,.55)}
+.vgrip:hover::after,.vgrip.drag::after{background:rgba(160,195,255,.95)}
 body.vresizing{cursor:ns-resize;user-select:none}
 .perr{padding:14px;background:var(--panel);color:#e5534b;font-size:14px}
 .perr .btn{margin-left:6px;vertical-align:middle}
@@ -897,7 +900,7 @@ function startVidResize(e, vid){
   grip.addEventListener("pointermove", move); grip.addEventListener("pointerup", end); grip.addEventListener("pointercancel", end);
 }
 function makePlayer(host, url, name, copyPrefix = ""){
-  host.innerHTML = `<div class="player"><video playsinline preload="metadata"></video><div class="vgrip" role="separator" aria-orientation="horizontal" aria-label="Drag to resize the video" title="Drag to resize · double-click to reset"></div>
+  host.innerHTML = `<div class="player"><video playsinline preload="metadata"></video>
     <div class="perr" hidden></div>
     <div class="ctl">
       <button class="pp" aria-label="Play">${ICON.play}</button>
@@ -907,7 +910,7 @@ function makePlayer(host, url, name, copyPrefix = ""){
       <span class="spdgrp"><button class="spdd" aria-label="Slower" title="Slower">&minus;</button><button class="spd" aria-label="Playback speed (click to reset to 1x)" title="Click to reset to 1&times;">1&times;</button><button class="spdu" aria-label="Faster" title="Faster">+</button></span>
       <button class="mute" aria-label="Mute"></button>
       <input class="vol" type="range" min="0" max="1" step="0.01" aria-label="Volume">
-    </div></div>
+    </div></div><div class="vgrip" role="separator" aria-orientation="horizontal" aria-label="Drag to resize the video" title="Drag to resize · double-click to reset"></div>
     <div class="keys" aria-label="Keyboard shortcuts"><span><kbd>A</kbd> - Rewind 5s</span><span><kbd>D</kbd> - Forward 5s</span><span><kbd>Space</kbd> - Play/Pause</span><span>Hold A or D to scrub</span></div>`;
   const q = c => host.querySelector(c);
   q(".vgrip").addEventListener("pointerdown", e => startVidResize(e, q("video")));
