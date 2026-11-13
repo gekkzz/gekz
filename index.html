@@ -109,6 +109,17 @@ input[type=range]{accent-color:#8ab4f8}
 @media (max-width:960px){.split{grid-template-columns:1fr}.side{position:static;max-height:none}}
 .rhead{display:none;position:sticky;top:0;z-index:1;background:var(--panel);padding:12px 14px;border-bottom:1px solid var(--line);justify-content:space-between;align-items:baseline;gap:10px;font-size:14px}
 .rhead b{font-size:15px}
+.rhead{flex-wrap:wrap;align-items:center}
+.rhead .rscore{margin-left:auto}
+.rfilter{display:inline-flex;gap:6px;flex-wrap:wrap}
+.rfilter button{all:unset;cursor:pointer;font-size:12.5px;line-height:1.3;padding:3px 10px;border:1px solid var(--line);border-radius:999px;color:var(--mut)}
+.rfilter button:hover{color:var(--fg)}
+.rfilter button.on{border-color:#3fb950;color:var(--fg)}
+.rfilter button:focus-visible{outline:2px solid var(--fg);outline-offset:1px}
+.rfilter .n{opacity:.7;margin-left:4px;font-variant-numeric:tabular-nums}
+#rubricBox.compact #body tr.fhide{display:none}
+.rnone{display:none;padding:28px 16px;text-align:center;color:var(--mut);font-size:14px}
+#rubricBox.compact .rnone.show{display:block}
 td::before{display:none}
 .compact .rhead{display:flex}
 .compact thead{display:none}
@@ -174,6 +185,10 @@ tr.flashrow{outline:2px solid #7cc4ff;outline-offset:-2px}
 .sbs{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px;padding:16px 24px 20px;align-items:start}
 .sbshalf{min-width:0}
 .sbsbar{display:flex;gap:8px;flex-wrap:wrap;padding:0 0 12px}
+/* narrower halves: tighter buttons so each half's row stays on one line and the boxes below line up */
+.sbshalf{container-type:inline-size}
+@container (max-width:800px){.sbsbar{gap:6px}.sbsbar .subbtn{padding:6px 9px;font-size:13.5px}.sbsbar .bfsb{width:24px}.sbsbar .bfsval{min-width:34px}}
+@container (max-width:660px){.sbsbar{gap:5px}.sbsbar .subbtn{padding:5px 7px;font-size:12.5px}.sbsbar .bfsval{min-width:30px;font-size:11.5px}}
 .sbsbar .sub.back{border-style:dashed}
 .sbsbody{min-width:0}
 .sbsbody.rub{position:sticky;top:12px;max-height:calc(100vh - 24px);overflow:auto;border:1px solid var(--line);border-radius:10px;background:var(--panel)}
@@ -187,6 +202,13 @@ tr.flashrow{outline:2px solid #7cc4ff;outline-offset:-2px}
 .sbsbar .sub.szc{margin-left:auto}
 .sbsbar .sbstip{margin-left:auto;align-self:center;min-width:0}
 .sbsbar .sbstip + .sub.szc{margin-left:0}
+.sbsbar .bfsgrp{display:inline-flex;align-items:center;gap:2px;border:1px solid var(--line);border-radius:8px;padding:0 2px;align-self:center}
+.sbsbar .sbstip + .bfsgrp{margin-left:0}
+.sbsbar .bfsgrp + .sub.szc{margin-left:0}
+.bfsb{all:unset;cursor:pointer;width:28px;height:30px;display:inline-flex;align-items:center;justify-content:center;border-radius:6px;color:var(--fg);font-size:15px}
+.bfsb:hover{background:var(--btn)}
+.bfsb[disabled]{opacity:.35;cursor:not-allowed;background:none}
+.bfsval{min-width:38px;text-align:center;font-size:12px;color:var(--mut);font-variant-numeric:tabular-nums}
 .sbsbody #badStage > .nhead{display:none}   /* in Side by Side the half's button already says Went Wrong; Copy sits in the button row */
 .player{position:relative}
 .szo{position:absolute;pointer-events:none;z-index:2}
@@ -337,7 +359,7 @@ td.id{width:64px}
 <div id="msg" class="msg" hidden></div>
 <section id="p-rubric">
 <div id="rubricBox">
-<div class="rhead"><span>Rubric <span class="scsub" id="rheadTask"></span></span><span>Score <b class="scoreV">&mdash;</b> <span class="scsub subV"></span></span></div>
+<div class="rhead"><span class="rtitle" hidden>Rubric <span class="scsub" id="rheadTask"></span></span><span class="rfilter" role="group" aria-label="Show rows"></span><span class="rscore">Score <b class="scoreV">&mdash;</b> <span class="scsub subV"></span></span></div>
 <div class="wrap">
   <table id="tbl" hidden>
     <thead><tr>
@@ -673,6 +695,7 @@ function draw(){
   }).join("");
   document.querySelectorAll("#body textarea").forEach(a => { a.value = rowOf(a)[a.dataset.k] || ""; fit(a); mark(a); });
   score();
+  applyFilter();
   liveUpdate();
 }
 
@@ -693,7 +716,7 @@ $("body").addEventListener("input", e => {
   r[k] = a.value; if (k === "id") r.raw = false;
   fit(a); mark(a); dirty = true; scheduleSave();
   if (k === "w") score();
-  if (k === "ts"){ a.parentElement.querySelector(".chips").innerHTML = chipsHTML(r, +a.dataset.n); liveUpdate(); }
+  if (k === "ts"){ a.parentElement.querySelector(".chips").innerHTML = chipsHTML(r, +a.dataset.n); applyFilter(); liveUpdate(); }
 });
 $("body").addEventListener("focusout", e => { if (e.target.tagName === "TEXTAREA") e.target._undoOpen = false; });
 window.addEventListener("resize", () => document.querySelectorAll("#body textarea").forEach(fit));
@@ -831,7 +854,7 @@ function topLine(t){
   return slots[t].getBoundingClientRect().top + (h ? h.getBoundingClientRect().height : 0);
 }
 function getPos(){
-  const rows = rowEls(); if (!rows.length) return null;
+  const rows = rowEls().filter(tr => tr.offsetParent || !tr.classList.contains("fhide")); if (!rows.length) return null;
   const line = topLine(curTab);
   for (let i = 0; i < rows.length; i++){
     const r = rows[i].getBoundingClientRect();
@@ -840,7 +863,7 @@ function getPos(){
   return { i: rows.length - 1, frac: 1 };
 }
 function applyPos(p){
-  const rows = rowEls(); if (!p || !rows.length) return;
+  const rows = rowEls().filter(tr => tr.offsetParent || !tr.classList.contains("fhide")); if (!p || !rows.length) return;
   if (!winMode(curTab)) window.scrollTo(0, 0);
   const row = rows[Math.min(p.i, rows.length - 1)], r = row.getBoundingClientRect();
   const delta = r.top + p.frac * r.height - topLine(curTab);
@@ -972,7 +995,10 @@ function makePlayer(host, url, name, copyPrefix = ""){
   const goTo = t => { if (v.seeking){ pendT = t; } else { pendT = null; v.currentTime = t; } };
   v.addEventListener("seeked", () => { if (pendT != null){ const t = pendT; pendT = null; if (Math.abs(t - v.currentTime) > 0.0005) v.currentTime = t; } });
   const upd = () => { const t = here(); ts.textContent = fmt(t); if (!drag) seek.value = t; };
-  const loop = () => { upd(); raf = requestAnimationFrame(loop); };
+  /* a range timestamp (e.g. 0:30.00-0:31.00) plays just that range and pauses at its end */
+  let stopAt = null;
+  const checkStop = () => { if (stopAt != null && v.currentTime >= stopAt){ const t = stopAt; stopAt = null; v.pause(); goTo(t); } };
+  const loop = () => { checkStop(); upd(); raf = requestAnimationFrame(loop); };
   const setIcon = playing => { pp.innerHTML = playing ? ICON.pause : ICON.play; pp.setAttribute("aria-label", playing ? "Pause" : "Play"); };
   const toggle = () => { if (v.paused){ const r = v.play(); if (r && r.catch) r.catch(() => {}); } else v.pause(); };
   v.addEventListener("play", () => { setIcon(true); cancelAnimationFrame(raf); loop(); });
@@ -1038,7 +1064,7 @@ function makePlayer(host, url, name, copyPrefix = ""){
     tipEl.style.left = e.clientX + "px"; tipEl.style.top = (e.clientY - 14) + "px"; tipEl.hidden = false;
   });
   seek.addEventListener("mouseleave", () => { tipEl.hidden = true; });
-  seek.addEventListener("input", () => { goTo(+seek.value); ts.textContent = fmt(+seek.value); });
+  seek.addEventListener("input", () => { stopAt = null; goTo(+seek.value); ts.textContent = fmt(+seek.value); });
   ts.addEventListener("click", () => copyText((copyPrefix ? copyPrefix + " " : "") + ts.textContent, tip));
   mute.addEventListener("click", () => { audio.m = !audio.m; syncAudio(); });
   vol.addEventListener("input", () => { audio.v = +vol.value; audio.m = audio.v === 0; syncAudio(); });
@@ -1047,9 +1073,10 @@ function makePlayer(host, url, name, copyPrefix = ""){
     playing: () => !v.paused,
     /* only the player on screen buffers ahead; the rest keep just their basic info */
     setBuffer(on){ const want = on ? "auto" : "metadata"; if (v.preload !== want) v.preload = want; },
-    seekTo(t, play = false){
+    seekTo(t, play = false, rangeEnd = null){
       const go = () => {
         v.pause();
+        stopAt = play && rangeEnd != null && rangeEnd > t ? rangeEnd : null;
         if (play) players.forEach(p => { if (p !== api) p.pause(); });   /* only one video plays at a time */
         const end = isFinite(v.duration) ? v.duration : Infinity;
         goTo(Math.min(end, Math.max(0, t))); upd();
@@ -1058,7 +1085,7 @@ function makePlayer(host, url, name, copyPrefix = ""){
       };
       if (v.readyState >= 1) go(); else v.addEventListener("loadedmetadata", go, { once: true });
     },
-    seekBy(d){ const end = isFinite(v.duration) ? v.duration : Infinity; goTo(Math.min(end, Math.max(0, here() + d))); upd(); },
+    seekBy(d){ stopAt = null; const end = isFinite(v.duration) ? v.duration : Infinity; goTo(Math.min(end, Math.max(0, here() + d))); upd(); },
     syncAudio(){ v.volume = audio.v; v.muted = audio.m; vol.value = audio.m ? 0 : audio.v; mute.innerHTML = (audio.m || audio.v === 0) ? ICON.mute : ICON.vol; mute.setAttribute("aria-label", audio.m ? "Unmute" : "Mute"); },
     destroy(){ tipEl.remove(); cancelAnimationFrame(raf); v.pause(); v.removeAttribute("src"); v.load(); players.delete(api); host.innerHTML = ""; }
   };
@@ -1196,18 +1223,18 @@ function viewSpec(spec, avoid = -1){
   const r = sbsOwner("rubric"), s0 = sbsOwner("src");
   const h = avoid >= 0 ? 1 - avoid : r >= 0 ? 1 - r : s0 >= 0 ? s0 : 0;
   V().active = c; sbsPick(h, "src", true); renderClips();
-  c.player.seekTo(p.sec, true);   /* timestamps start playing from that moment */
+  c.player.seekTo(p.sec, true, p.end);   /* timestamps start playing from that moment (and stop at a range's end) */
 }
 
 /* "Load this task's videos?" box shown when a timestamp is clicked before any clips are loaded */
-async function askLoad(spec, avoid = -1, genSec = null){
+async function askLoad(spec, avoid = -1, genSec = null, genEnd = null){
   if (megaBusy){ flash("This task's videos are still loading. Try the timestamp again in a moment."); return; }
   const dlg = $("askDlg"), t = cur;
   const streaming = await canStream();
   $("askTxt").textContent = "Task " + t.id + "'s videos aren't loaded yet, so this timestamp (" + spec + ") can't be shown. "
     + (streaming ? "Confirm to load its source clips, golden edit and generated video from MEGA. They start playing within a few seconds, and you'll be taken to this moment."
                  : "Confirm to download its source clips, golden edit and generated video from MEGA. Large files can take a while; you'll be taken to this moment when the clips are ready.");
-  dlg._spec = spec; dlg._task = t; dlg._avoid = avoid; dlg._gen = genSec;
+  dlg._spec = spec; dlg._task = t; dlg._avoid = avoid; dlg._gen = genSec; dlg._genEnd = genEnd;
   if (dlg.showModal) dlg.showModal(); else dlg.setAttribute("open", "");
   $("askOk").focus();
 }
@@ -1218,7 +1245,7 @@ $("askOk").addEventListener("click", async () => {
   if (t !== cur) return;
   const ok = await megaLoad({ preconfirmed: true });
   if (!ok || t !== cur) return;
-  if (dlg._gen != null){ if (V().gen) viewGen(dlg._gen, dlg._avoid); }
+  if (dlg._gen != null){ if (V().gen) viewGen(dlg._gen, dlg._avoid, dlg._genEnd); }
   else if (findClip((parseTs(spec) || {}).name || "")) viewSpec(spec, dlg._avoid);
 });
 
@@ -1634,7 +1661,9 @@ function sbsBar(h){
     + ((half.sel === "gold" || half.sel === "gen") && v[half.sel] && sbsOwner(half.sel) === h
        ? btn(" szc", 'data-sz="1" title="Outline the Instagram Reels safe zone on the video"', "Safe Zone Checker", safeZone) : "")
     + (half.sel === "bad" && sbsOwner("bad") === h
-       ? '<span class="tip sbstip" aria-live="polite"></span>' + btn(" szc", 'data-copybad="1" title="Copy the Went Wrong notes"', "Copy", false) : "");
+       ? '<span class="tip sbstip" aria-live="polite"></span>'
+         + '<span class="bfsgrp"><button class="bfsb" type="button" data-bfs="-1" aria-label="Smaller text" title="Smaller text"' + (bfs <= BFS_MIN ? " disabled" : "") + '>&minus;</button><span class="bfsval" aria-live="polite">' + bfs + 'px</span><button class="bfsb" type="button" data-bfs="1" aria-label="Larger text" title="Larger text"' + (bfs >= BFS_MAX ? " disabled" : "") + '>+</button></span>'
+         + btn(" szc", 'data-copybad="1" title="Copy the Went Wrong notes"', "Copy", false) : "");
 }
 
 /* ---------- Safe Zone Checker: Instagram Reels safe area drawn over the golden edit / generated video ----------
@@ -1721,6 +1750,7 @@ function sbsPick(h, sel, clips){
 [0, 1].forEach(h => {
   $("sbsBar" + h).addEventListener("click", e => {
     const b = e.target.closest("button"); if (!b) return;
+    if (b.dataset.bfs){ setBFS(bfs + (+b.dataset.bfs) * BFS_STEP); return; }
     if (b.dataset.copybad){ const t = $("notesBad").value.replace(/\s+$/, ""), tip = b.closest(".sbsbar").querySelector(".sbstip");
       if (t) copyText(t, tip); else { tip.textContent = "Nothing to copy"; clearTimeout(tip._t); tip._t = setTimeout(() => { tip.textContent = ""; }, 1300); } return; }
     if (b.dataset.sz){ safeZone = !safeZone; try { localStorage.setItem("rr-safezone", safeZone ? "1" : "0"); } catch (_) {} sbsRender(); return; }
@@ -1881,10 +1911,10 @@ function caretOffset(view, x, y){
   try { const r = document.createRange(); r.setStart(view, 0); r.setEnd(node, off); return r.toString().length; } catch (_) { return null; }
 }
 const halfOf = el => { const h = el.closest(".sbshalf"); return h && curTab === "sbs" ? +h.dataset.h : -1; };
-function viewGen(sec, avoid = -1){
+function viewGen(sec, avoid = -1, end = null){
   const g = V().gen;
   if (!g){
-    if (cur && parseMegaLink(sc(cur.n, "gen"))){ askLoad(fmt(sec) + " in the generated video", avoid, sec); return; }
+    if (cur && parseMegaLink(sc(cur.n, "gen"))){ askLoad(fmt(sec) + " in the generated video", avoid, sec, end); return; }
     flash("This task has no generated video yet. Load it from MEGA or upload it, then try again."); return;
   }
   note("");
@@ -1892,7 +1922,7 @@ function viewGen(sec, avoid = -1){
   const o = sbsOwner("gen"), r = sbsOwner("rubric");
   const h = avoid >= 0 ? 1 - avoid : o >= 0 ? o : r >= 0 ? 1 - r : 0;
   if (sbsOwner("gen") !== h) sbsPick(h, "gen");
-  g.player.seekTo(sec, true);
+  g.player.seekTo(sec, true, end);
 }
 /* a quick glide (about a third of a second, however far) instead of the browser's slower smooth scroll;
    any wheel, touch or key from the person stops it */
@@ -1923,6 +1953,7 @@ function viewRow(id, avoid = -1){
     const h = avoid >= 0 ? 1 - avoid : r >= 0 ? r : sbsOwner("bad") >= 0 ? 1 - sbsOwner("bad") : 1;
     if (sbsOwner("rubric") !== h) sbsPick(h, "rubric");
   }
+  if (rowEls()[n] && rowEls()[n].classList.contains("fhide")) setFilter("all");
   const tr = rowEls()[n]; if (!tr) return;
   if (winMode(curTab)) glideTo(null, window.scrollY + tr.getBoundingClientRect().top - 12);
   else { const box = slots[curTab]; glideTo(box, box.scrollTop + tr.getBoundingClientRect().top - topLine(curTab)); }
@@ -1942,7 +1973,7 @@ LINKED.forEach(id => {
   };
   view.addEventListener("click", e => {
     const b = e.target.closest(".tslink");
-    if (b){ if (b.dataset.row) viewRow(b.dataset.row, halfOf(view)); else if (b.dataset.spec) viewSpec(b.dataset.spec, halfOf(view)); else viewGen(+b.dataset.gen, halfOf(view)); return; }
+    if (b){ if (b.dataset.row) viewRow(b.dataset.row, halfOf(view)); else if (b.dataset.spec) viewSpec(b.dataset.spec, halfOf(view)); else viewGen(+b.dataset.gen, halfOf(view), +b.dataset.end); return; }
     const sel = window.getSelection(); if (sel && !sel.isCollapsed && view.contains(sel.anchorNode)) return;   /* selecting text to copy */
     edit(caretOffset(view, e.clientX, e.clientY));
   });
@@ -1960,6 +1991,42 @@ LINKED.forEach(id => {
   renderNoteView(ta);
 });
 fitPanes();
+
+/* ---------- rubric filter (in the rubric header beside Side by Side / Prompt / Multi-Take; the Rubric tab always shows every row) ---------- */
+var RFILTERS = [["all", "All", () => true], ["pass", "Passes", r => r.ev === "p"], ["fail", "Fails", r => r.ev === "f"], ["ts", "Timestamps", r => (r.ts || "").split(";").some(x => parseTs(x.trim()))]];
+var rfilter = "all";   /* var: draw() can run before this line */
+try { const f = localStorage.getItem("rr-rfilter"); if (RFILTERS.some(x => x[0] === f)) rfilter = f; } catch (_) {}
+function applyFilter(){
+  const box = document.querySelector(".rfilter"); if (!box || !RFILTERS) return;
+  const rows = cur ? cur.rows : [], test = (RFILTERS.find(x => x[0] === rfilter) || RFILTERS[0])[2];
+  box.innerHTML = RFILTERS.map(([k, label, fn]) => '<button type="button" data-f="' + k + '" class="' + (k === rfilter ? "on" : "") + '" aria-pressed="' + (k === rfilter) + '">' + label
+    + (k === "all" ? "" : '<span class="n">' + rows.filter(fn).length + '</span>') + '</button>').join("");
+  let shown = 0;
+  rowEls().forEach((tr, i) => { const ok = !rows[i] || test(rows[i]); tr.classList.toggle("fhide", !ok); if (ok) shown++; });
+  let none = rubricBox.querySelector(".rnone");
+  if (!none){ none = document.createElement("div"); none.className = "rnone"; rubricBox.querySelector(".wrap").after(none); }
+  none.textContent = rows.length && !shown ? "No rows match this filter." : "";
+  none.classList.toggle("show", !!(rows.length && !shown));
+}
+function setFilter(k){
+  rfilter = k; try { localStorage.setItem("rr-rfilter", k); } catch (_) {}
+  applyFilter();
+  const box = slots[curTab]; if (box && !winMode(curTab) && rubricShown()) box.scrollTop = 0;
+}
+document.querySelector(".rfilter").addEventListener("click", e => { const b = e.target.closest("button[data-f]"); if (b) setFilter(b.dataset.f); });
+
+/* ---------- Went Wrong text size (display only: the notes themselves, the copy and the CSV are unchanged) ---------- */
+var BFS_MIN = 11, BFS_MAX = 28, BFS_STEP = 1, bfs = 14;   /* var: the Side by Side bar can render before this line */
+try { const n = +localStorage.getItem("rr-bfs"); if (n >= BFS_MIN && n <= BFS_MAX) bfs = n; } catch (_) {}
+function setBFS(n){
+  bfs = Math.min(BFS_MAX, Math.max(BFS_MIN, n));
+  $("notesBad").style.fontSize = bfs + "px"; if ($("notesBad")._view) $("notesBad")._view.style.fontSize = bfs + "px";
+  try { localStorage.setItem("rr-bfs", String(bfs)); } catch (_) {}
+  document.querySelectorAll(".sbsbar .bfsval").forEach(x => { x.textContent = bfs + "px"; });
+  document.querySelectorAll(".sbsbar [data-bfs]").forEach(x => { x.disabled = (+x.dataset.bfs < 0 && bfs <= BFS_MIN) || (+x.dataset.bfs > 0 && bfs >= BFS_MAX); });
+}
+setBFS(bfs);
+applyFilter();
 
 </script>
 </body>
