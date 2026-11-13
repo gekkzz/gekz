@@ -207,6 +207,8 @@ tr.flashrow{outline:2px solid #7cc4ff;outline-offset:-2px}
 .tslink.live{background:rgba(56,139,253,.38);color:#fff}
 .tslink:focus-visible{outline:2px solid var(--fg)}
 textarea.notes[hidden],.notesview[hidden]{display:none !important}
+@keyframes rowflash{from{background:rgba(56,139,253,.22)}to{background:transparent}}
+#rubricBox:not(.compact) #body tr.jumped > td,#rubricBox.compact #body tr.jumped{animation:rowflash 1.5s ease-out}
 .saveind{opacity:.8}.saveind.err{color:#e5534b;opacity:1}
 
 .compact tr.hasview .tscopy{all:unset;display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:6px;cursor:pointer;color:var(--mut)}
@@ -1851,13 +1853,15 @@ if (window.ResizeObserver){ const ro = new ResizeObserver(() => { autoVidH(); fi
    The notes show as text with links: "out 4.00-6.20s" style times open the generated video at that moment,
    "Clip 3 0:55.20-0:57.40" opens that source clip. Clicking anywhere else edits the text right there. */
 var LINKED = ["notesMulti", "notesGood", "notesBad"];
-const NOTE_RE = /(Clip\s*\d+\s+(?:\d+:)?\d+:[0-5]\d(?:\.\d{1,3})?(?:\s*(?:-|–|—|to)\s*(?:\d+:)?\d+:[0-5]\d(?:\.\d{1,3})?)?)|(?<![\d:.])(\d{1,4}\.\d{1,3})\s*-\s*(\d{1,4}\.\d{1,3})s?(?![\d:.])/gi;
+const NOTE_RE = /([Cc][Ll][Ii][Pp]\s*\d+\s+(?:\d+:)?\d+:[0-5]\d(?:\.\d{1,3})?(?:\s*(?:-|–|—|to)\s*(?:\d+:)?\d+:[0-5]\d(?:\.\d{1,3})?)?)|(?<![\d:.])(\d{1,4}\.\d{1,3})\s*-\s*(\d{1,4}\.\d{1,3})s?(?![\d:.])|\b([IE]\d{1,3})\b/g;   /* clip moment | generated-video moment | rubric ID (I4, E1) */
 function renderNoteView(ta){
   const view = ta._view, txt = ta.value; if (!view) return;
   let html = "", last = 0;
-  txt.replace(NOTE_RE, (m, clip, a, b, off) => {
+  txt.replace(NOTE_RE, (m, clip, a, b, rid, off) => {
     html += esc(txt.slice(last, off));
-    html += clip
+    html += rid
+      ? '<span role="button" tabindex="0" class="tslink" data-row="' + rid + '" title="Show rubric row ' + rid + '">' + esc(m) + '</span>'
+      : clip
       ? '<span role="button" tabindex="0" class="tslink" data-spec="' + escA(clip.replace(/\s+/g, " ")) + '" title="Show this moment in the source clip">' + esc(m) + '</span>'
       : '<span role="button" tabindex="0" class="tslink" data-gen="' + a + '" data-end="' + b + '" title="Show this moment in the generated video">' + esc(m) + '</span>';   /* spans, so a link can wrap like the text around it */
     last = off + m.length; return m;
@@ -1888,6 +1892,41 @@ function viewGen(sec, avoid = -1){
   if (sbsOwner("gen") !== h) sbsPick(h, "gen");
   g.player.seekTo(sec);
 }
+/* a quick glide (about a third of a second, however far) instead of the browser's slower smooth scroll;
+   any wheel, touch or key from the person stops it */
+let glide = null;
+function glideTo(box, top){
+  const get = () => box ? box.scrollTop : window.scrollY, set = y => box ? (box.scrollTop = y) : window.scrollTo(0, y);
+  const max = box ? box.scrollHeight - box.clientHeight : document.documentElement.scrollHeight - window.innerHeight;
+  const from = get(), to = Math.max(0, Math.min(max, Math.round(top)));
+  if (glide) glide.stop();
+  if (Math.abs(to - from) < 2 || (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches)){ set(to); return; }
+  const t0 = performance.now(), DUR = 350, ease = x => 1 - Math.pow(1 - x, 3);
+  let raf = 0;
+  const stop = () => { cancelAnimationFrame(raf); ["wheel", "touchstart", "keydown", "pointerdown"].forEach(ev => window.removeEventListener(ev, stop, true)); glide = null; };
+  ["wheel", "touchstart", "keydown", "pointerdown"].forEach(ev => window.addEventListener(ev, stop, { capture: true, passive: true }));
+  const step = now => { const x = Math.min(1, (now - t0) / DUR); set(from + (to - from) * ease(x)); if (x < 1) raf = requestAnimationFrame(step); else stop(); };
+  glide = { stop }; raf = requestAnimationFrame(step);
+}
+/* show a rubric row by its ID: in Side by Side the rubric opens in the other half (or stays where it is), elsewhere
+   it scrolls the rubric beside the notes, or switches to Side by Side when the tab has no rubric */
+function viewRow(id, avoid = -1){
+  if (!cur) return;
+  const n = cur.rows.findIndex(r => (r.id || "").trim().toUpperCase() === id.toUpperCase());
+  if (n < 0){ flash("This task's rubric has no row " + id + "."); return; }
+  note("");
+  if (curTab === "sbs" || !rubricShown()){
+    if (curTab !== "sbs") showTab("sbs");
+    const r = sbsOwner("rubric");
+    const h = avoid >= 0 ? 1 - avoid : r >= 0 ? r : sbsOwner("bad") >= 0 ? 1 - sbsOwner("bad") : 1;
+    if (sbsOwner("rubric") !== h) sbsPick(h, "rubric");
+  }
+  const tr = rowEls()[n]; if (!tr) return;
+  if (winMode(curTab)) glideTo(null, window.scrollY + tr.getBoundingClientRect().top - 12);
+  else { const box = slots[curTab]; glideTo(box, box.scrollTop + tr.getBoundingClientRect().top - topLine(curTab)); }
+  tr.classList.remove("jumped"); void tr.offsetWidth; tr.classList.add("jumped");   /* a brief flash so the eye lands on it */
+  setTimeout(() => tr.classList.remove("jumped"), 1600);
+}
 LINKED.forEach(id => {
   const ta = $(id), view = document.createElement("div");
   view.className = "notes solo notesview"; view.tabIndex = 0; view.setAttribute("role", "textbox"); view.setAttribute("aria-label", ta.labels && ta.labels[0] ? ta.labels[0].textContent : "Notes");
@@ -1901,7 +1940,7 @@ LINKED.forEach(id => {
   };
   view.addEventListener("click", e => {
     const b = e.target.closest(".tslink");
-    if (b){ if (b.dataset.spec) viewSpec(b.dataset.spec, halfOf(view)); else viewGen(+b.dataset.gen, halfOf(view)); return; }
+    if (b){ if (b.dataset.row) viewRow(b.dataset.row, halfOf(view)); else if (b.dataset.spec) viewSpec(b.dataset.spec, halfOf(view)); else viewGen(+b.dataset.gen, halfOf(view)); return; }
     const sel = window.getSelection(); if (sel && !sel.isCollapsed && view.contains(sel.anchorNode)) return;   /* selecting text to copy */
     edit(caretOffset(view, e.clientX, e.clientY));
   });
