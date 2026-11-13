@@ -183,6 +183,8 @@ tr.flashrow{outline:2px solid #7cc4ff;outline-offset:-2px}
 .taskbar label{display:inline-flex;align-items:center;gap:8px;font-weight:600}
 .taskbar select{padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--fg);font:inherit;font-weight:400}
 .taskbar select#taskSel{min-width:260px}
+#copyTask{margin-left:-4px}
+.tasktip:empty{display:none}
 .taskbar input[type=search]{width:190px;padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--fg);font:inherit;font-weight:400}
 .taskbar input[type=search]:focus{outline:none;border-color:var(--mut)}
 .taskbar .navb{padding:5px 11px}
@@ -249,10 +251,10 @@ td.id{width:64px}
   <nav class="tabs" role="tablist" aria-label="Sections">
     <button class="tab on" role="tab" aria-selected="true" data-tab="rubric">Rubric</button>
     <button class="tab" role="tab" aria-selected="false" data-tab="prompt">Prompt</button>
-    <button class="tab" role="tab" aria-selected="false" data-tab="sbs">Side by Side</button>
         <button class="tab" role="tab" aria-selected="false" data-tab="multi">Multi-Take Moments</button>
     <button class="tab" role="tab" aria-selected="false" data-tab="good">Went Well</button>
     <button class="tab" role="tab" aria-selected="false" data-tab="bad">Went Wrong</button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="sbs">Side by Side</button>
   </nav>
   <div class="bar">
     <div class="barrow">
@@ -267,6 +269,7 @@ td.id{width:64px}
 </header>
 <div class="taskbar" id="taskbar" hidden>
   <label>Task <select id="taskSel" aria-label="Task"></select></label>
+  <button class="chipcopy" id="copyTask" type="button" aria-label="Copy task ID" title="Copy task ID"></button><span class="tip tasktip" id="copyTaskTip" aria-live="polite"></span>
   <button class="btn navb" id="prevT" title="Previous task" aria-label="Previous task">&lsaquo;</button>
   <button class="btn navb" id="nextT" title="Next task" aria-label="Next task">&rsaquo;</button>
   <span class="tmeta" id="tpos"></span>
@@ -543,7 +546,7 @@ function fillTaskSel(){
   const list = sortedTasks();
   $("taskSel").innerHTML = list.map(t => {
     const cat = sc(t.n, "cat").trim();
-    return '<option value="' + escA(t.id) + '">' + esc(t.id) + (cat ? " \u2014 " + esc(cat) : "") + '</option>';
+    return '<option value="' + escA(t.id) + '">' + (t.n + 2) + ". " + esc(t.id) + (cat ? " \u2014 " + esc(cat) : "") + '</option>';   /* t.n + 2 = the row in the spreadsheet (row 1 is the header) */
   }).join("");
   if (cur && list.includes(cur)) $("taskSel").value = cur.id;
   const q = $("taskSearch").value.trim();
@@ -848,6 +851,8 @@ function fmt(t){
   const m = Math.floor(cs / 6000), s = Math.floor(cs % 6000 / 100), r = cs % 100;
   return String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0") + "." + String(r).padStart(2, "0");
 }
+$("copyTask").innerHTML = COPY_SVG;
+$("copyTask").addEventListener("click", () => { if (cur) copyText(cur.id, $("copyTaskTip")); });   /* just the ID, no row number or category */
 async function copyText(text, tip){
   let ok = false;
   try { await navigator.clipboard.writeText(text); ok = true; }
