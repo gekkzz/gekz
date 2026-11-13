@@ -88,6 +88,7 @@ input[type=range]{accent-color:#8ab4f8}
 .seektip{position:fixed;z-index:50;pointer-events:none;transform:translate(-50%,-100%);background:#000;color:#fff;border:1px solid #444;padding:3px 8px;border-radius:6px;font:600 12px/1.3 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-variant-numeric:tabular-nums}
 
 .split{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(340px,1fr);gap:20px;padding:20px 24px;align-items:start}
+.split.even{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
 .side{position:sticky;top:12px;max-height:calc(100vh - 24px);overflow:auto;border:1px solid var(--line);border-radius:10px;background:var(--panel)}
 @media (max-width:960px){.split{grid-template-columns:1fr}.side{position:static;max-height:none}}
 .rhead{display:none;position:sticky;top:0;z-index:1;background:var(--panel);padding:12px 14px;border-bottom:1px solid var(--line);justify-content:space-between;align-items:baseline;gap:10px;font-size:14px}
@@ -189,6 +190,7 @@ tr.flashrow{outline:2px solid #7cc4ff;outline-offset:-2px}
 .taskbar input[type=search]:focus{outline:none;border-color:var(--mut)}
 .taskbar .navb{padding:5px 11px}
 .tmeta{color:var(--mut)}
+#tmeta{display:none}   /* category / model / length line hidden for now */
 .tright{margin-left:auto;display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:10px 12px}
 .tscore{display:inline-flex;align-items:baseline;gap:8px;margin-right:4px}
 .tscore b{font-size:16px}
@@ -252,8 +254,7 @@ td.id{width:64px}
     <button class="tab on" role="tab" aria-selected="true" data-tab="rubric">Rubric</button>
     <button class="tab" role="tab" aria-selected="false" data-tab="prompt">Prompt</button>
         <button class="tab" role="tab" aria-selected="false" data-tab="multi">Multi-Take Moments</button>
-    <button class="tab" role="tab" aria-selected="false" data-tab="good">Went Well</button>
-    <button class="tab" role="tab" aria-selected="false" data-tab="bad">Went Wrong</button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="verdicts">Verdicts</button>
     <button class="tab" role="tab" aria-selected="false" data-tab="sbs">Side by Side</button>
   </nav>
   <div class="bar">
@@ -275,7 +276,7 @@ td.id{width:64px}
   <span class="tmeta" id="tpos"></span>
   <label>Search <input id="taskSearch" type="search" placeholder="Task ID or category" autocomplete="off" spellcheck="false" aria-label="Search tasks"></label>
   <span class="tmeta" id="tfound"></span>
-  <span class="tmeta" id="tmeta"></span>
+  <span class="tmeta" id="tmeta" hidden></span>
   <span class="tmeta saveind" id="saveInd" aria-live="polite"></span>
   <div class="tright">
   <span class="tscore">Score <b class="scoreV">&mdash;</b><span class="scsub subV"></span><span class="sheetsc" id="sheetSc"></span></span>
@@ -374,25 +375,20 @@ td.id{width:64px}
   </div>
 </section>
 
-<section id="p-good" hidden>
-  <div class="split">
+<section id="p-verdicts" hidden>
+  <div class="split even">
     <div class="stage">
       <div class="nhead top"><label for="notesGood">Went Well</label>
         <span class="nact"><span class="tip" id="gtip" aria-live="polite"></span><button class="btn" id="gcopy">Copy to clipboard</button></span></div>
       <textarea id="notesGood" class="notes solo" spellcheck="false" placeholder="Write what the model did well (column S)"></textarea>
     </div>
-    <div class="side" id="slotGood"></div>
-  </div>
-</section>
-
-<section id="p-bad" hidden>
-  <div class="split">
-    <div class="stage" id="badStage">
-      <div class="nhead top"><label for="notesBad">Went Wrong</label>
-        <span class="nact"><span class="tip" id="btip" aria-live="polite"></span><button class="btn" id="bcopy">Copy to clipboard</button></span></div>
-      <textarea id="notesBad" class="notes solo" spellcheck="false" placeholder="Write what the model could have done better (column T)"></textarea>
+    <div id="badHome">
+      <div class="stage" id="badStage">
+        <div class="nhead top"><label for="notesBad">Went Wrong</label>
+          <span class="nact"><span class="tip" id="btip" aria-live="polite"></span><button class="btn" id="bcopy">Copy to clipboard</button></span></div>
+        <textarea id="notesBad" class="notes solo" spellcheck="false" placeholder="Write what the model could have done better (column T)"></textarea>
+      </div>
     </div>
-    <div class="side" id="slotBad"></div>
   </div>
 </section>
 
@@ -782,10 +778,10 @@ document.querySelectorAll("label.btn").forEach(l => l.addEventListener("keydown"
 }));
 
 /* ---------- tabs ---------- */
-const panes = { rubric: $("p-rubric"), prompt: $("p-prompt"), src: $("p-src"), gold: $("p-gold"), gen: $("p-gen"), multi: $("p-multi"), good: $("p-good"), bad: $("p-bad"), sbs: $("p-sbs") };
+const panes = { rubric: $("p-rubric"), prompt: $("p-prompt"), src: $("p-src"), gold: $("p-gold"), gen: $("p-gen"), multi: $("p-multi"), verdicts: $("p-verdicts"), sbs: $("p-sbs") };
 let curTab = "rubric";
 const rubricBox = $("rubricBox");
-const slots = { rubric: $("p-rubric"), prompt: $("slotPrompt"), src: $("slotSrc"), gold: $("slotGold"), gen: $("slotGen"), multi: $("slotMulti"), good: $("slotGood"), bad: $("slotBad"), sbs: $("rubricPark") };
+const slots = { rubric: $("p-rubric"), prompt: $("slotPrompt"), src: $("slotSrc"), gold: $("slotGold"), gen: $("slotGen"), multi: $("slotMulti"), verdicts: $("rubricPark"), sbs: $("rubricPark") };   /* Verdicts has no rubric beside it */
 /* keep the rubric at the same row when switching tabs (see the live app for the reasoning) */
 const winMode = t => t === "rubric" || window.innerWidth <= 960;
 const rowEls = () => [...document.querySelectorAll("#body tr")];
@@ -1518,7 +1514,7 @@ const hostOf = (v, sel) => sel === "src" ? (v.active && v.active.host) : sel ===
 const playerOf = (v, sel) => sel === "src" ? (v.active && v.active.player) : sel === "gold" || sel === "gen" ? (v[sel] && v[sel].player) : null;
 function moveTo(el, parent, before){ if (el && el.parentNode !== parent) parent.insertBefore(el, before || null); }
 /* the Went Wrong notepad (with its Copy button) lives on its own tab unless a Side by Side half shows it */
-function badHome(){ moveTo($("badStage"), $("slotBad").parentNode, $("slotBad")); }
+function badHome(){ moveTo($("badStage"), $("badHome")); }
 function sendHome(v){
   badHome();
   v.clips.forEach(c => moveTo(c.host, $("clipStage")));
