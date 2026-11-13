@@ -69,7 +69,12 @@ td.id textarea{color:#d4a72c;font-weight:600}
 .stage{min-width:0}
 .vname{padding-bottom:10px;color:var(--mut);font-size:13px}
 .player{background:#000;border-radius:10px;overflow:hidden;border:1px solid var(--line)}
-.player video{display:block;width:100%;max-height:68vh;background:#000;cursor:pointer}
+.player video{display:block;width:100%;max-height:var(--vidh, var(--vidh-auto, calc(100vh - 285px)));min-height:120px;background:#000;cursor:pointer}
+/* drag the bottom edge of the picture to make every player taller or shorter (double-click to reset) */
+.vgrip{height:10px;margin-top:-5px;position:relative;z-index:3;cursor:ns-resize;touch-action:none;display:flex;align-items:center;justify-content:center}
+.vgrip::after{content:"";width:44px;height:4px;border-radius:2px;background:rgba(255,255,255,.28);transition:background .15s}
+.vgrip:hover::after,.vgrip.drag::after{background:rgba(255,255,255,.7)}
+body.vresizing{cursor:ns-resize;user-select:none}
 .perr{padding:14px;background:var(--panel);color:#e5534b;font-size:14px}
 .perr .btn{margin-left:6px;vertical-align:middle}
 .ctl{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:10px 12px;background:var(--panel);color:var(--fg)}
@@ -165,7 +170,7 @@ tr.flashrow{outline:2px solid #7cc4ff;outline-offset:-2px}
 .sbsnote[hidden]{display:none}
 @media (max-width:960px){.sbs{grid-template-columns:minmax(0,1fr)}}
 .vhost:not([hidden]){display:flex;flex-direction:column}
-.vhost .vname{order:2;text-align:right;padding:8px 2px 0}
+.vhost .vname{display:none}   /* file name under the player hidden */
 .sbsbar .sub.szc{margin-left:auto}
 .player{position:relative}
 .szo{position:absolute;pointer-events:none;z-index:2}
@@ -861,8 +866,38 @@ async function copyText(text, tip){
   tip.textContent = ok ? "Copied" : "Copy failed";
   clearTimeout(tip._t); tip._t = setTimeout(() => { tip.textContent = ""; }, 1300);
 }
+/* one shared video height for every player, remembered in this browser */
+const VIDH_KEY = "rr-vidh";
+function setVidH(px){
+  if (px == null){ document.documentElement.style.removeProperty("--vidh"); try { localStorage.removeItem(VIDH_KEY); } catch (_) {} return; }
+  px = Math.round(Math.min(window.innerHeight * 0.95, Math.max(160, px)));
+  document.documentElement.style.setProperty("--vidh", px + "px");
+  try { localStorage.setItem(VIDH_KEY, String(px)); } catch (_) {}
+}
+try { const h = +localStorage.getItem(VIDH_KEY); if (h > 0) document.documentElement.style.setProperty("--vidh", h + "px"); } catch (_) {}
+/* default size (until the edge is dragged): as tall as fits with the controls still on screen when the page
+   is scrolled to the top, measured from where the player actually starts (the header can take one or two rows) */
+function autoVidH(){
+  const vid = [...document.querySelectorAll(".player video")].find(v => v.offsetParent), root = document.documentElement;
+  if (!vid) return;
+  const host = vid.closest(".vhost") || vid.closest(".player").parentNode, r = vid.getBoundingClientRect();
+  const below = host.getBoundingClientRect().bottom - r.bottom;             /* controls + shortcut hints */
+  const px = Math.round(Math.max(window.innerHeight * 0.6, window.innerHeight - (r.top + window.scrollY) - below - 14));   /* small screens: scroll a little rather than shrink the video */
+  if (root.style.getPropertyValue("--vidh-auto") !== px + "px") root.style.setProperty("--vidh-auto", px + "px");
+}
+window.addEventListener("resize", () => { clearTimeout(autoVidH._t); autoVidH._t = setTimeout(autoVidH, 100); });
+function startVidResize(e, vid){
+  if (e.button !== 0) return;
+  e.preventDefault();
+  const grip = e.currentTarget, y0 = e.clientY, h0 = vid.getBoundingClientRect().height;
+  grip.setPointerCapture(e.pointerId); grip.classList.add("drag"); document.body.classList.add("vresizing");
+  const move = ev => setVidH(h0 + ev.clientY - y0);
+  const end = () => { grip.classList.remove("drag"); document.body.classList.remove("vresizing");
+    grip.removeEventListener("pointermove", move); grip.removeEventListener("pointerup", end); grip.removeEventListener("pointercancel", end); };
+  grip.addEventListener("pointermove", move); grip.addEventListener("pointerup", end); grip.addEventListener("pointercancel", end);
+}
 function makePlayer(host, url, name, copyPrefix = ""){
-  host.innerHTML = `<div class="player"><video playsinline preload="metadata"></video>
+  host.innerHTML = `<div class="player"><video playsinline preload="metadata"></video><div class="vgrip" role="separator" aria-orientation="horizontal" aria-label="Drag to resize the video" title="Drag to resize · double-click to reset"></div>
     <div class="perr" hidden></div>
     <div class="ctl">
       <button class="pp" aria-label="Play">${ICON.play}</button>
@@ -875,6 +910,8 @@ function makePlayer(host, url, name, copyPrefix = ""){
     </div></div>
     <div class="keys" aria-label="Keyboard shortcuts"><span><kbd>A</kbd> - Rewind 5s</span><span><kbd>D</kbd> - Forward 5s</span><span><kbd>Space</kbd> - Play/Pause</span><span>Hold A or D to scrub</span></div>`;
   const q = c => host.querySelector(c);
+  q(".vgrip").addEventListener("pointerdown", e => startVidResize(e, q("video")));
+  q(".vgrip").addEventListener("dblclick", () => setVidH(null));
   const v = q("video"), pp = q(".pp"), seek = q(".seek"), ts = q(".ts"), dur = q(".dur"),
         tip = q(".tip"), mute = q(".mute"), vol = q(".vol"), err = q(".perr"),
         spdD = q(".spdd"), spdU = q(".spdu"), spd = q(".spd");
@@ -904,6 +941,7 @@ function makePlayer(host, url, name, copyPrefix = ""){
   v.addEventListener("play", () => { setIcon(true); cancelAnimationFrame(raf); loop(); });
   v.addEventListener("pause", () => { setIcon(false); cancelAnimationFrame(raf); upd(); });
   v.addEventListener("loadedmetadata", () => {
+    autoVidH();
     seek.max = v.duration; dur.textContent = "/ " + fmt(v.duration); upd();
     if (!v.videoWidth){ err.hidden = false; err.textContent = "No picture: " + name + " uses a video format this browser can't display (often ProRes from editing software, or HEVC). Audio and timestamps still work. Convert it to MP4 (H.264) to see the video."; }
   });
@@ -1604,6 +1642,7 @@ function sbsRender(pos){
   if (badHalf >= 0) moveTo($("badStage"), sbsBody(badHalf), sbsBody(badHalf).querySelector(".sbsnote"));
   else badHome();
   slots.sbs = rubricHalf >= 0 ? sbsBody(rubricHalf) : $("rubricPark");
+  autoVidH();
   szApply();
   if (rubricHalf >= 0){ document.querySelectorAll("#body textarea").forEach(fit); applyPos(pos); }
   updBuffering();
