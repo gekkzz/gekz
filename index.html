@@ -1051,12 +1051,12 @@ function makePlayer(host, url, name, copyPrefix = ""){
   const keepSpot = () => { if (!v.error && v.readyState >= 1) lastT = here(); };
   v.addEventListener("seeking", keepSpot); v.addEventListener("timeupdate", keepSpot);
   v.addEventListener("play", () => { resumePlay = true; }); v.addEventListener("pause", () => { if (!v.error) resumePlay = false; });
-  const reload = () => {
+  const reload = (force = false) => {
     reloading = true;
     const t = lastT, go = resumePlay; pendT = null;
     err.hidden = false; err.textContent = "Reconnecting to MEGA…";
     v.removeAttribute("src"); v.load();
-    v.src = isMega ? url + "?r=" + Date.now() : url;   /* a fresh request (the MEGA worker ignores the query) */
+    v.src = isMega ? url + "?r=" + Date.now() + (force ? "&q=1" : "") : url;   /* a fresh request; q=1 (Reload video pressed) makes the worker try MEGA again even if its limit was hit */
     v.addEventListener("loadedmetadata", () => {
       reloading = false;
       if (t) goTo(Math.min(t, (v.duration || t) - 0.05));
@@ -1075,10 +1075,18 @@ function makePlayer(host, url, name, copyPrefix = ""){
     err.innerHTML = "";
     const msg = document.createElement("span"); msg.textContent = why + " ";
     const b = document.createElement("button"); b.className = "btn o-blue"; b.type = "button"; b.textContent = "Reload video";
-    b.addEventListener("click", () => { fails = []; reload(); });
+    b.addEventListener("click", () => { fails = []; reload(true); });
     err.append(msg, b);
   };
-  v.addEventListener("error", () => {
+  const showQuota = left => {
+    reloading = false; err.hidden = false; err.innerHTML = "";
+    const msg = document.createElement("span"); msg.textContent = quotaMsg(left) + " ";
+    const b = document.createElement("button"); b.className = "btn o-blue"; b.type = "button"; b.textContent = "Try again";
+    b.addEventListener("click", () => { fails = []; reload(true); });
+    err.append(msg, b);
+  };
+  v.addEventListener("error", async () => {
+    if (isMega){ const left = await megaQuotaLeft(); if (left > 0){ showQuota(left); return; } }   /* MEGA's limit: reloading won't help */
     if (everLoaded || isMega){
       const now = Date.now(); fails = fails.filter(x => now - x < 60000); fails.push(now);
       if (fails.length <= 3){ setTimeout(reload, 300 * fails.length); return; }
@@ -1502,7 +1510,7 @@ async function megaNode(url, hint = null){
     /* say what the shared link actually shows, so it's clear whether recent uploads are visible through it at all */
     const newest = newestNode(root), when = newest && newest.timestamp ? new Date(newest.timestamp * 1000).toLocaleString([], { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }) : "";
     const col = hint ? ({ src: "source clips", gold: "golden edit", gen: "generated video" })[hint.k] + " " : "";
-    throw new Error("[v6] Couldn't find the " + col + "item " + link.node + " in the shared MEGA folder " + (root.name ? "\u201c" + root.name + "\u201d (" + link.root + ")" : link.root) + " (" + countNodes(root) + " items, " + (root.__fromCache ? "from this browser's saved copy" : "read just now") + (root.__caughtUp ? " including " + root.__caughtUp + " later changes" : ", no later changes reported")
+    throw new Error("[v7] Couldn't find the " + col + "item " + link.node + " in the shared MEGA folder " + (root.name ? "\u201c" + root.name + "\u201d (" + link.root + ")" : link.root) + " (" + countNodes(root) + " items, " + (root.__fromCache ? "from this browser's saved copy" : "read just now") + (root.__caughtUp ? " including " + root.__caughtUp + " later changes" : ", no later changes reported")
       + (newest ? "; newest item visible through this link: \u201c" + (newest.name || "unnamed") + "\u201d" + (when ? ", added " + when : "") : "") + "). "
       + (hint && hint.why ? "Also looked for it by folder layout, but " + hint.why + ". " : "")
       + "If your new videos were added after that, they aren't reachable through this link: they may be in a different shared folder, or in a subfolder that has its own separate share link. "
@@ -1563,6 +1571,10 @@ const WARM_SECONDS = 3, WARM_TIMEOUT = 10000;
 const WARM_LANES = 2;
 let warmVs = [], warmJob = null;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+/* MEGA's download limit: the streaming worker knows when it was hit and how long until it resets (0 = not limited) */
+async function megaQuotaLeft(){ try { const r = await fetch("/mega-stream/__status", { cache: "no-store" }); return r.ok ? +((await r.json()).quotaLeft) || 0 : 0; } catch (_) { return 0; } }
+function fmtWait(ms){ const m = Math.max(1, Math.round(ms / 60000)); return m < 60 ? m + " min" : Math.floor(m / 60) + " h" + (m % 60 ? " " + (m % 60) + " min" : ""); }
+const quotaMsg = ms => "MEGA's download limit for your internet connection has been reached. It resets in about " + fmtWait(ms) + ". Parts you've already watched still play; the rest can load once it resets.";
 function warmList(t){
   const seen = new Set(), list = [];
   t.rows.forEach(r => (r.ts || "").split(";").forEach(s => {
@@ -1601,9 +1613,11 @@ function warmTask(t){
       for (let tries = 0; tries < 20 && !gone(); tries++){
         while (!gone() && !quiet()) await sleep(500);                    /* wait while anything plays or another task is open */
         if (gone()) break;
+        if (await megaQuotaLeft() > 0){ job.stop = true; break; }         /* MEGA's limit: preloading would only fail; stop until the next task load */
         v.__aborted = false;
-        if (v.getAttribute("src") !== it.c.url){
-          v.src = it.c.url;
+        const wurl = it.c.url + "?w=1";                                   /* tells the worker it's a preloader (no read-ahead) */
+        if (v.getAttribute("src") !== wurl){
+          v.src = wurl;
           await new Promise(res => { v.__wake = res; v.addEventListener("loadedmetadata", res, { once: true }); v.addEventListener("error", res, { once: true }); setTimeout(res, WARM_TIMEOUT); });
           v.__wake = null;
         }
@@ -1703,7 +1717,7 @@ async function megaLoadInner(opts){
 }
 function megaErr(e){
   const m = String((e && e.message) || e || "Unknown error");
-  if (/bandwidth|quota|EOVERQUOTA|509|-17/i.test(m)) return "MEGA's download limit was reached (" + m + "). Wait a while and try again, or upload the videos yourself.";
+  if (/bandwidth|quota|EOVERQUOTA|509|-17/i.test(m)){ const sec = +((/(\d+)\s*seconds/.exec(m) || [])[1]) || 0; return sec > 0 ? quotaMsg(sec * 1000) : "MEGA's download limit for your internet connection has been reached. Wait a while and try again, or upload the videos yourself."; }
   if (/Failed to fetch|NetworkError|CORS/i.test(m)) return "Couldn't reach MEGA from this page (" + m + "). Check your connection, or upload the videos yourself.";
   return m;
 }

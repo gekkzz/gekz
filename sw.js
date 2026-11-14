@@ -6,13 +6,18 @@
    Speed-ups:
    - MEGA is read in larger pieces over more parallel connections (DL below).
    - Everything fetched is kept in memory in 1 MB blocks (up to CACHE_MAX), so going back to a spot,
-     the buffer-ahead of the visible clip, and the pre-loaded rubric moments are served instantly. */
+     the buffer-ahead of the visible clip, and the pre-loaded rubric moments are served instantly.
+   - Decryption uses the browser's built-in AES (hardware-accelerated) instead of megajs's JavaScript AES,
+     checked against megajs once per file; if they ever disagree it switches back for good (see "fast decryption").
+   - Read-ahead: after the player's request finishes, the next few MB are fetched too (see READ_AHEAD).
+   - MEGA's download limit is recognised: the worker stops asking MEGA until it resets and tells the page. */
 const MEGA_LIB = self.MEGA_LIB_URL || "https://cdn.jsdelivr.net/npm/megajs@1.3.10/dist/main.browser-umd.js";
 const BLOCK = 1024 * 1024;                 /* cache unit */
 const CACHE_MAX = 400 * BLOCK;             /* memory used for cached video, oldest dropped first */
 const MAX_RESPONSE = 32 * BLOCK;           /* most sent for one request; the player asks again for more */
 const OPEN_RESPONSE = 8 * BLOCK;           /* for open-ended requests ("from here on"), so little is wasted when the player jumps */
 const DL = { maxConnections: 6, initialChunkSize: BLOCK, chunkSizeIncrement: BLOCK, maxChunkSize: 4 * BLOCK };
+const READ_AHEAD = 4;                      /* blocks fetched past the end of what the player asked for (not for the hidden preloaders) */
 let libErr = null;
 try { importScripts(MEGA_LIB); } catch (e) { libErr = e; }
 
@@ -244,12 +249,82 @@ function cput(k, v){
   while (cacheBytes > CACHE_MAX && cache.size){ const [k0, v0] = cache.entries().next().value; cache.delete(k0); cacheBytes -= v0.byteLength; }
 }
 
-/* download blocks b0..b1 in one MEGA request, handing each complete block to onBlock in order */
+/* ---- fast decryption ----
+   MEGA files are AES-128-CTR encrypted. megajs decrypts in plain JavaScript; the browser's built-in AES (crypto.subtle)
+   is native code using the CPU's AES hardware, so it's much faster and lighter on battery. Same cipher, same result:
+   the key is the file key's two halves XORed, the counter is the 8-byte nonce + the 16-byte block number.
+   The first block of every file is also decrypted by megajs and compared; any mismatch or error turns this off for
+   the rest of the session and that block (and everything after) uses megajs as before. */
+let wcOK = !!(self.crypto && self.crypto.subtle);
+const wcKeys = new WeakMap();
+function wcKey(file){
+  let p = wcKeys.get(file);
+  if (!p){
+    const k = file.key, raw = new Uint8Array(16);
+    for (let i = 0; i < 16; i++) raw[i] = k[i] ^ k[16 + i];
+    p = crypto.subtle.importKey("raw", raw, { name: "AES-CTR" }, false, ["decrypt"]);
+    wcKeys.set(file, p); p.catch(() => wcKeys.delete(file));
+  }
+  return p;
+}
+async function wcDecrypt(file, offset, bytes){
+  const ctr = new Uint8Array(16); ctr.set(file.key.subarray(16, 24), 0);
+  let n = offset / 16;
+  for (let i = 15; i >= 8; i--){ ctr[i] = n % 256; n = Math.floor(n / 256); }
+  return new Uint8Array(await crypto.subtle.decrypt({ name: "AES-CTR", counter: ctr, length: 64 }, await wcKey(file), bytes));
+}
+function jsDecrypt(file, offset, bytes){
+  return new Promise((res, rej) => {
+    const s = self.mega.decrypt(file.key, { start: offset, disableVerification: true }), out = [];
+    s.on("data", d => out.push(new Uint8Array(d))); s.on("error", rej);
+    s.on("end", () => { const r = new Uint8Array(out.reduce((a, x) => a + x.length, 0)); let o = 0; out.forEach(x => { r.set(x, o); o += x.length; }); res(r); });
+    s.end(bytes.slice());                                                  /* a copy: megajs decrypts in place */
+  });
+}
+const canFast = file => wcOK && !!(file && file.key && file.key.length >= 32 && self.mega && self.mega.decrypt);
+async function decryptBlock(file, offset, bytes){
+  if (wcOK){
+    try {
+      const out = await wcDecrypt(file, offset, bytes);
+      if (!file.__wcChecked){
+        const n = Math.min(bytes.length, 4096), ref = await jsDecrypt(file, offset, bytes.subarray(0, n));
+        for (let i = 0; i < n; i++) if (ref[i] !== out[i]) throw new Error("built-in decryption disagreed with megajs");
+        file.__wcChecked = true;
+      }
+      return out;
+    } catch (e) { wcOK = false; self.__wcError = String((e && e.message) || e); }
+  }
+  return jsDecrypt(file, offset, bytes);
+}
+
+/* ---- MEGA's download limit ----
+   MEGA caps how much one internet connection can download over a few hours. When it's hit, stop asking MEGA until
+   it resets (pieces already saved still play), and let the page ask how long that is (/mega-stream/__status). */
+let quotaUntil = 0;
+const QUOTA_RE = /bandwidth|quota|509|EOVERQUOTA|-17\b/i;
+const quotaActive = () => Date.now() < quotaUntil;
+function noteQuota(e){
+  const msg = String((e && e.message) || e);
+  if (!QUOTA_RE.test(msg)) return false;
+  const secs = +(e && e.timeLimit) || +((/(\d+)\s*seconds/.exec(msg) || [])[1]) || 0;
+  quotaUntil = Date.now() + (secs > 0 ? secs * 1000 : 10 * 60 * 1000);     /* unknown: wait 10 minutes before trying again */
+  return true;
+}
+const quotaError = () => new Error("MEGA download limit reached: " + Math.ceil((quotaUntil - Date.now()) / 1000) + " seconds until it resets");
+
+/* download blocks b0..b1 in one MEGA request, handing each complete (decrypted) block to onBlock in order */
 function fetchRun(file, b0, b1, size, onBlock, job){
   return new Promise((res, rej) => {
     const start = b0 * BLOCK, end = Math.min(size - 1, (b1 + 1) * BLOCK - 1);
-    let ms; try { ms = file.download({ start, end, ...DL }); } catch (e) { rej(e); return; }
+    const fast = canFast(file);
+    let ms; try { ms = file.download({ start, end, ...DL, returnCiphertext: fast }); } catch (e) { rej(e); return; }
     job.ms = ms;
+    let chain = Promise.resolve(), failed = false;
+    const emit = (i, bytes) => {
+      if (!fast){ onBlock(i, bytes); return; }
+      chain = chain.then(async () => { if (job.cancelled || failed) return; const out = await decryptBlock(file, i * BLOCK, bytes); if (!job.cancelled && !failed) onBlock(i, out); })
+                   .catch(e => { failed = true; rej(e); });
+    };
     let parts = [], have = 0, bi = b0;
     const take = n => {
       const out = new Uint8Array(n); let off = 0;
@@ -259,23 +334,44 @@ function fetchRun(file, b0, b1, size, onBlock, job){
     ms.on("data", d => {
       if (job.cancelled) return;
       parts.push(d instanceof Uint8Array ? d : new Uint8Array(d)); have += d.length;
-      while (have >= BLOCK) onBlock(bi++, take(BLOCK));
+      while (have >= BLOCK) emit(bi++, take(BLOCK));
     });
-    ms.on("end", () => { if (have > 0) onBlock(bi++, take(have)); res(); });
-    ms.on("error", rej);
+    ms.on("end", () => { if (have > 0) emit(bi++, take(have)); chain.then(() => { if (!failed) res(); }); });
+    ms.on("error", e => { failed = true; rej(e); });                       /* blocks still being decrypted are dropped; the retry refetches them */
     ms.on("close", () => { if (job.cancelled) res(); });
   });
 }
 
 self.addEventListener("fetch", e => {
   const u = new URL(e.request.url);
-  if (u.origin === self.location.origin && u.pathname.startsWith("/mega-stream/")) e.respondWith(serve(e.request, u));
+  if (u.origin !== self.location.origin) return;
+  if (u.pathname === "/mega-stream/__status") e.respondWith(new Response(JSON.stringify({ quotaLeft: Math.max(0, quotaUntil - Date.now()), fastDecrypt: wcOK, fastDecryptError: self.__wcError || null }), { headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } }));
+  else if (u.pathname.startsWith("/mega-stream/")) e.respondWith(serve(e.request, u));
 });
+
+/* read-ahead: fetch the next few blocks after a finished player request, so continuing past where it stopped (or the
+   next moment a little further on) is already here. One at a time per file; pieces already saved are skipped. */
+const raBusy = new Set();
+async function readAhead(file, root, id, from, size){
+  const fk = root + "/" + id, ck = i => fk + "/" + i, missing = i => !cache.has(ck(i)) && !diskHas(ck(i)) && !inflight.has(ck(i));
+  const last = Math.min(Math.ceil(size / BLOCK) - 1, from + READ_AHEAD - 1);
+  if (raBusy.has(fk) || quotaActive()) return;
+  let i = from; while (i <= last && !missing(i)) i++;
+  if (i > last) return;
+  let j = i; while (j + 1 <= last && missing(j + 1)) j++;
+  raBusy.add(fk);
+  for (let b = i; b <= j; b++) inflight.add(ck(b));
+  try { await fetchRun(file, i, j, size, (bi, bytes) => { cput(ck(bi), bytes); diskPut(ck(bi), bytes); inflight.delete(ck(bi)); }, { cancelled: false, ms: null }); }
+  catch (e) { noteQuota(e); }
+  finally { for (let b = i; b <= j; b++) inflight.delete(ck(b)); raBusy.delete(fk); }
+}
 
 async function serve(req, u){
   try {
     if (libErr || !self.mega) throw new Error("MEGA library didn't load: " + (libErr && libErr.message));
     const [root, key, id] = u.pathname.slice("/mega-stream/".length).split("/").map(decodeURIComponent);
+    const warm = u.searchParams.has("w");                                  /* a hidden preloader: no read-ahead */
+    if (u.searchParams.has("q")) quotaUntil = 0;                            /* "Reload video" pressed: try MEGA again now */
     const file = await nodeFor(root, key, id);
     await diskOpen();
     if (!file || file.directory) return new Response("Not found in the MEGA folder", { status: 404 });
@@ -305,6 +401,7 @@ async function serve(req, u){
             if (!hit && inflight.has(ck(i))) hit = await waitBlock(ck(i), job);                        /* another request is fetching it */
             if (hit){ send(i, hit); i++; continue; }
             if (job.cancelled) break;
+            if (quotaActive()) throw quotaError();                           /* not saved here, and MEGA would refuse anyway */
             let j = i; while (j + 1 <= b1 && !cache.has(ck(j + 1)) && !diskHas(ck(j + 1)) && !inflight.has(ck(j + 1))) j++;   /* run of missing blocks */
             for (let b = i; b <= j; b++) inflight.add(ck(b));
             /* a dropped MEGA download is retried from the first block not yet sent, so the player never sees the hiccup */
@@ -312,12 +409,12 @@ async function serve(req, u){
             try {
               for (let attempt = 0; next <= j; attempt++){
                 try { await fetchRun(file, next, j, size, (bi, bytes) => { cput(ck(bi), bytes); diskPut(ck(bi), bytes); inflight.delete(ck(bi)); send(bi, bytes); next = bi + 1; }, job); break; }
-                catch (e) { if (job.cancelled || attempt >= 2 || /bandwidth|quota|509|EOVERQUOTA/i.test(String(e && e.message))) throw e; await sleep(500 * (attempt + 1)); }
+                catch (e) { if (job.cancelled || noteQuota(e) || attempt >= 2) throw e; await sleep(500 * (attempt + 1)); }
               }
             } finally { for (let b = i; b <= j; b++) inflight.delete(ck(b)); }
             i = j + 1;
           }
-          if (!job.cancelled) c.close();
+          if (!job.cancelled){ c.close(); if (!warm) readAhead(file, root, id, b1 + 1, size); }
         } catch (err) { if (!job.cancelled) try { c.error(err); } catch (_) {} }
       },
       cancel(){ job.cancelled = true; try { job.ms && job.ms.destroy(); } catch (_) {} }
@@ -329,6 +426,6 @@ async function serve(req, u){
       "Accept-Ranges": "bytes", "Cache-Control": "no-store" } });
   } catch (err) {
     const msg = String((err && err.message) || err);
-    return new Response(msg, { status: /bandwidth|509/i.test(msg) ? 509 : 502, headers: { "Content-Type": "text/plain" } });
+    return new Response(msg, { status: noteQuota(err) ? 509 : 502, headers: { "Content-Type": "text/plain" } });
   }
 }
