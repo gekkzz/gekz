@@ -1572,7 +1572,7 @@ function warmList(t){
     const k = c.name + "@" + Math.floor(p.sec);
     if (!seen.has(k)){ seen.add(k); list.push({ c, sec: p.sec, k }); }
   }));
-  return list.sort((a, b) => a.c.name.localeCompare(b.c.name, undefined, { numeric: true }) || a.sec - b.sec);
+  return list;   /* rubric row order (top to bottom, then left to right within a row), like you review; repeats keep their first place */
 }
 function warmEl(i){
   if (!warmVs[i]){
@@ -1594,33 +1594,37 @@ function warmTask(t){
   const quiet = () => cur === t && ![...players].some(p => p.playing());
   const lane = async i => {
     const v = warmEl(i);
-    while (!job.stop){
+    v.__owner = job;                                                     /* a newer job takes the element over; an older one then leaves it alone */
+    const gone = () => job.stop || v.__owner !== job;
+    while (!gone()){
       const it = list[next++]; if (!it) break;
-      for (let tries = 0; tries < 20 && !job.stop; tries++){
-        while (!job.stop && !quiet()) await sleep(500);                  /* wait while anything plays or another task is open */
-        if (job.stop) break;
+      for (let tries = 0; tries < 20 && !gone(); tries++){
+        while (!gone() && !quiet()) await sleep(500);                    /* wait while anything plays or another task is open */
+        if (gone()) break;
         v.__aborted = false;
         if (v.getAttribute("src") !== it.c.url){
           v.src = it.c.url;
           await new Promise(res => { v.__wake = res; v.addEventListener("loadedmetadata", res, { once: true }); v.addEventListener("error", res, { once: true }); setTimeout(res, WARM_TIMEOUT); });
           v.__wake = null;
         }
-        if (v.__aborted || job.stop) continue;                            /* canceled by you: try this moment again later */
+        if (gone()) break;
+        if (v.__aborted) continue;                                        /* canceled by you: try this moment again later */
         if (v.error || !(v.duration > 0)) break;                          /* can't load: skip it */
         v.currentTime = Math.min(it.sec, v.duration);
         const t0 = Date.now(); let interrupted = false, ok = false;
-        while (!job.stop && Date.now() - t0 < WARM_TIMEOUT){
+        while (!gone() && Date.now() - t0 < WARM_TIMEOUT){
           if (v.__aborted || !quiet()){ interrupted = true; break; }
           const b = v.buffered;
           for (let k = 0; k < b.length; k++) if (b.start(k) <= it.sec + 0.05 && b.end(k) >= Math.min(v.duration, it.sec + WARM_SECONDS)) ok = true;
           if (ok){ t.warmDone.add(it.k); break; }
           await sleep(150);
         }
+        if (gone()) break;
         if (interrupted){ warmAbort(); continue; }
         break;                                                            /* done (or timed out): next moment */
       }
     }
-    if (v.getAttribute("src")){ v.removeAttribute("src"); v.load(); }
+    if (v.__owner === job && v.getAttribute("src")){ v.removeAttribute("src"); v.load(); }
   };
   (async () => { await Promise.all(Array.from({ length: WARM_LANES }, (_, i) => lane(i))); if (warmJob === job) warmJob = null; })();
 }
