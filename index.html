@@ -1367,13 +1367,14 @@ function megaByLayout(root, hint){
   let taskDir = null;
   const walk = d => { if (taskDir || !d.directory) return; if ((d.name || "").trim().toLowerCase() === want){ taskDir = d; return; } (d.children || []).forEach(walk); };
   walk(root);
-  if (!taskDir) return null;
+  if (!taskDir){ hint.why = "no folder named " + hint.task + " is visible through this link"; return null; }
   const names = (COL_DIRS[hint.k] || []).concat(hint.col ? [hint.col] : []).map(n => n.toLowerCase());
   const colDir = (taskDir.children || []).find(c => c.directory && names.includes((c.name || "").trim().toLowerCase()));
-  if (!colDir) return null;
+  if (!colDir){ hint.why = "folder " + taskDir.name + " has no " + (COL_DIRS[hint.k] || [hint.col])[0] + " folder (it has: " + ((taskDir.children || []).map(c => c.name).join(", ") || "nothing") + ")"; return null; }
   if (hint.k === "src") return { node: colDir, path: taskDir.name + "/" + colDir.name };
   const vids = (colDir.children || []).filter(isVid).sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));   /* newest first */
-  return vids.length ? { node: vids[0], path: taskDir.name + "/" + colDir.name + "/" + vids[0].name } : null;
+  if (!vids.length){ hint.why = taskDir.name + "/" + colDir.name + " has no video file in it"; return null; }
+  return { node: vids[0], path: taskDir.name + "/" + colDir.name + "/" + vids[0].name };
 }
 async function megaNode(url, hint = null){
   const link = parseMegaLink(url);
@@ -1394,8 +1395,10 @@ async function megaNode(url, hint = null){
   if (!node){
     /* say what the shared link actually shows, so it's clear whether recent uploads are visible through it at all */
     const newest = newestNode(root), when = newest && newest.timestamp ? new Date(newest.timestamp * 1000).toLocaleString([], { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }) : "";
-    throw new Error("Couldn't find item " + link.node + " in the shared MEGA folder " + link.root + " (" + countNodes(root) + " items, read just now"
+    const col = hint ? ({ src: "source clips", gold: "golden edit", gen: "generated video" })[hint.k] + " " : "";
+    throw new Error("[v3] Couldn't find the " + col + "item " + link.node + " in the shared MEGA folder " + (root.name ? "\u201c" + root.name + "\u201d (" + link.root + ")" : link.root) + " (" + countNodes(root) + " items, read just now"
       + (newest ? "; newest item visible through this link: \u201c" + (newest.name || "unnamed") + "\u201d" + (when ? ", added " + when : "") : "") + "). "
+      + (hint && hint.why ? "Also looked for it by folder layout, but " + hint.why + ". " : "")
       + "If your new videos were added after that, they aren't reachable through this link: they may be in a different shared folder, or in a subfolder that has its own separate share link. "
       + "Open the link from the sheet in MEGA to check, or share the new videos' parent folder and use links from that share.");
   }
