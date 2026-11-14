@@ -344,13 +344,17 @@ td.id{width:64px}
 /* split-view cards for the task rubric */
 .compact tr::after{display:none}
 .compact td.id{order:1;width:64px}
-.compact td.kind{order:2;width:auto;padding-top:20px;margin-right:18px}
+.compact td.kind{order:2;width:auto;padding-top:22px;margin-right:18px}
 .compact td.kind::before{display:none}
 .compact td.w{order:3;width:70px}
 .compact td.crit{order:6;flex:1 1 100%}
 .compact td.c-ts{order:7;flex:1 1 100%;max-width:none}
-.compact td.c-ev{order:4;align-self:flex-end;padding-bottom:1px;margin-left:10px}
-.compact td.act{order:5;margin-left:auto;text-align:right;align-self:flex-start}
+.compact td.c-ev{order:4;align-self:flex-end;padding-bottom:0;margin-left:10px}
+.compact td.act{order:5;margin-left:auto;text-align:right;align-self:flex-end;padding-bottom:2px}   /* lines up with Pass/Fail and the ID/weight values */
+#body td.act{white-space:nowrap}
+#body td.act .flagb,#body td.act .del{display:inline-flex;align-items:center;box-sizing:border-box;height:34px;vertical-align:bottom;line-height:1}
+.compact #body td.act{padding-bottom:0}   /* Flag and Delete share Pass/Fail's height and line */
+#rubricBox:not(.compact) #body td.act button{position:relative;top:-4px}
 .compact td.c-why{order:11;flex:1 1 100%;max-width:none}
 .compact td.c-why::before{display:none}
 .compact td.c-why textarea{font-size:13px}
@@ -1287,12 +1291,13 @@ function flagToggle(t, f){
   flagsRefresh();
   return i < 0;                                                            /* true = just flagged */
 }
-/* after flagging: show the Flags tab in the other half with the cursor in that flag's reason box */
+/* after flagging: the Flags tab takes the place of what you flagged from (the rubric or Went Wrong half), so the video
+   in the other half stays in view, with the cursor in that flag's reason box */
 function flagOpen(k, fromEl){
   const inRub = !!fromEl.closest("#rubricBox"), inBad = !!fromEl.closest("#badStage");
   if (curTab !== "sbs") showTab("sbs");
-  const avoid = inRub ? sbsOwner("rubric") : inBad ? sbsOwner("bad") : -1;
-  const target = avoid >= 0 ? 1 - avoid : sbsOwner("flags") >= 0 ? sbsOwner("flags") : 1;
+  const here = inRub ? sbsOwner("rubric") : inBad ? sbsOwner("bad") : -1;
+  const target = here >= 0 ? here : sbsOwner("flags") >= 0 ? sbsOwner("flags") : 1;
   if (sbsOwner("flags") !== target) sbsPick(target, "flags"); else renderFlags();
   const card = [...$("flagsStage").querySelectorAll(".fcard")].find(c => c.dataset.k === k); if (!card) return;
   const box = sbsBody(target), ta = card.querySelector(".fwhy");
@@ -1408,7 +1413,7 @@ function tsStep(dir){
   cur.kpos = cur.kpos || {};
   const was = cur.kpos[mode];
   let i = (was == null || was < 0) ? 0 : Math.min(was, list.length - 1) + dir;   /* nothing played yet: E and R both start at the first */
-  if (i >= list.length){ i = list.length - 1; flash("That was the last timestamp. Press E to replay it."); tsMark(mode, list[i]); return; }
+  if (i >= list.length) return;                                           /* already on the last one: R does nothing */
   cur.kpos[mode] = i;
   const it = list[i];
   tsMark(mode, it);
