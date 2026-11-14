@@ -1336,6 +1336,20 @@ function parseMegaLink(url){
   const m = /^https?:\/\/(?:www\.)?mega\.(?:nz|co\.nz)\/folder\/([^#\/?]+)#([^\/?]+)(?:\/(folder|file)\/([^\/?#\s]+))?/.exec((url || "").trim());
   return m ? { root: m[1], key: m[2], type: m[3] || "folder", node: m[4] || null } : null;
 }
+/* MEGA can answer a shared-folder listing from a saved snapshot when the request allows it ("ca": 1, which the
+   megajs library always sends). MEGA's own site then catches up on later changes; megajs doesn't, so newly added or
+   replaced files stay invisible. Asking without that flag gets the folder as it is now. */
+function megaLive(f){
+  const api = f && f.api;
+  if (!api || api.__live || typeof api.request !== "function") return f;
+  const orig = api.request.bind(api);
+  api.request = (req, ...rest) => {
+    if (req && req.a === "f" && "ca" in req){ req = Object.assign({}, req); delete req.ca; }
+    return orig(req, ...rest);
+  };
+  api.__live = true;
+  return f;
+}
 /* the shared folder's listing is kept for speed; it is read again when the sheet links to something the kept
    listing doesn't have (files added to the folder since), and dropped whenever a new CSV is loaded */
 const megaRootAt = {};
@@ -1345,7 +1359,7 @@ async function megaRoot(link, fresh = false){
   if (!megaRoots[k]){
     megaRootAt[k] = Date.now();
     const lib = await megaLib();
-    const f = lib.File.fromURL("https://mega.nz/folder/" + link.root + "#" + link.key);
+    const f = megaLive(lib.File.fromURL("https://mega.nz/folder/" + link.root + "#" + link.key));
     megaRoots[k] = f.loadAttributes().then(() => f).catch(e => { delete megaRoots[k]; throw e; });
   }
   return megaRoots[k];
@@ -1385,7 +1399,7 @@ async function megaNode(url, hint = null){
   if (!node && link.node){
     /* fallback: ask MEGA for that item directly, using the library's own lookup */
     const lib = await megaLib();
-    try { node = await lib.File.fromURL("https://mega.nz/folder/" + link.root + "#" + link.key + "/file/" + link.node).loadAttributes(); }
+    try { node = await megaLive(lib.File.fromURL("https://mega.nz/folder/" + link.root + "#" + link.key + "/file/" + link.node)).loadAttributes(); }
     catch (e) { node = null; }
   }
   if (!node && link.node && hint){
@@ -1396,7 +1410,7 @@ async function megaNode(url, hint = null){
     /* say what the shared link actually shows, so it's clear whether recent uploads are visible through it at all */
     const newest = newestNode(root), when = newest && newest.timestamp ? new Date(newest.timestamp * 1000).toLocaleString([], { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }) : "";
     const col = hint ? ({ src: "source clips", gold: "golden edit", gen: "generated video" })[hint.k] + " " : "";
-    throw new Error("[v3] Couldn't find the " + col + "item " + link.node + " in the shared MEGA folder " + (root.name ? "\u201c" + root.name + "\u201d (" + link.root + ")" : link.root) + " (" + countNodes(root) + " items, read just now"
+    throw new Error("[v4] Couldn't find the " + col + "item " + link.node + " in the shared MEGA folder " + (root.name ? "\u201c" + root.name + "\u201d (" + link.root + ")" : link.root) + " (" + countNodes(root) + " items, read just now"
       + (newest ? "; newest item visible through this link: \u201c" + (newest.name || "unnamed") + "\u201d" + (when ? ", added " + when : "") : "") + "). "
       + (hint && hint.why ? "Also looked for it by folder layout, but " + hint.why + ". " : "")
       + "If your new videos were added after that, they aren't reachable through this link: they may be in a different shared folder, or in a subfolder that has its own separate share link. "
