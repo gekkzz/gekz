@@ -233,10 +233,12 @@ tr.flashrow{outline:2px solid #7cc4ff;outline-offset:-2px}
 .flagb{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:5px;padding:4px 9px;border:2px solid #6a645a;border-radius:6px;font-size:13px;color:var(--mut);margin-right:8px;vertical-align:middle}
 .flagb:hover{color:var(--fg)}
 .flagb.on,.wwflag.on{border-color:#c77a2e;color:#f0a35e;background:rgba(199,122,46,.14)}
-.wwflag{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:4px;margin-left:6px;padding:0 7px;border:1.5px solid #6a645a;border-radius:6px;font-size:12px;line-height:18px;color:var(--mut);vertical-align:1px;white-space:nowrap}
-.wwflag::after{content:"Flag"}
-.wwflag.on::after{content:"Flagged"}
-.wwflag:hover{color:var(--fg)}
+.notesview .wwline{display:block;position:relative;padding-left:32px;margin-bottom:6px}
+.notesview .wwline.blank{min-height:1em}
+.notesview .wwnl{display:none}
+.wwflag{all:unset;cursor:pointer;position:absolute;left:0;top:.1em;display:inline-flex;align-items:center;justify-content:center;width:22px;height:20px;box-sizing:border-box;border:1.5px solid #4f4a43;border-radius:5px;color:#8a8378;opacity:.75}
+.wwflag:hover,.wwflag:focus-visible{opacity:1;color:var(--fg);border-color:#7c7366}
+.wwflag.on{opacity:1}
 #body tr.flagged > td:first-child{box-shadow:inset 3px 0 0 #c77a2e}
 .flagsstage{padding:14px 16px;display:flex;flex-direction:column;gap:12px;font-size:14px}
 .fhead{display:flex;align-items:center;justify-content:space-between;gap:10px}
@@ -355,7 +357,8 @@ td.id{width:64px}
 #body td.act .flagb,#body td.act .del{display:inline-flex;align-items:center;box-sizing:border-box;height:34px;vertical-align:bottom;line-height:1}
 .compact #body td.act{padding-bottom:0}   /* Flag and Delete share Pass/Fail's height and line */
 #rubricBox:not(.compact) #body td.act button{position:relative;top:-4px}
-.compact #body tr{padding-top:4px}   /* less space above the ID / Weight line; the values, Pass/Fail, Flag and Delete move up together */
+.compact #body tr{padding-top:4px}
+.compact #body td.kind,.compact #body td.c-ev,.compact #body td.act{align-self:center;padding-top:0;padding-bottom:0}   /* pill, Pass/Fail, Flag/Delete centred on the ID / Weight block (label + value) */   /* less space above the ID / Weight line; the values, Pass/Fail, Flag and Delete move up together */
 .compact td.c-why{order:11;flex:1 1 100%;max-width:none}
 .compact td.c-why::before{display:none}
 .compact td.c-why textarea{font-size:13px}
@@ -2372,8 +2375,11 @@ function openLink(b, el){
 function renderNoteView(ta){
   const view = ta._view, txt = ta.value; if (!view) return;
   let html;
-  if (ta.id === "notesBad" && cur){                                         /* Went Wrong: a Flag button at the end of each line/paragraph */
-    html = txt.split("\n").map(line => linkify(line) + (line.trim() ? '<button type="button" class="wwflag' + (flagHas(cur, "w:" + line.trim()) ? " on" : "") + '" aria-label="Flag this">' + FLAG_SVG + '</button>' : "")).join("\n");
+  if (ta.id === "notesBad" && cur){                                         /* Went Wrong: each line gets a flag in a left margin (hanging indent) */
+    html = txt.split("\n").map(line => {
+      const on = line.trim() && flagHas(cur, "w:" + line.trim());
+      return '<span class="wwline' + (line.trim() ? "" : " blank") + '">' + (line.trim() ? '<button type="button" class="wwflag' + (on ? " on" : "") + '" aria-label="' + (on ? "Unflag" : "Flag") + ' this line" title="' + (on ? "Flagged (click to unflag)" : "Flag this line") + '">' + FLAG_SVG + '</button>' : "") + linkify(line) + '</span>';
+    }).join('<span class="wwnl">\n</span>');                             /* the line breaks stay in the text (hidden), so clicking still edits at the right spot */
   } else html = linkify(txt);
   view.innerHTML = txt ? html : '<span class="ph">' + esc(ta.placeholder) + '</span>';
   if (ta.id === "notesBad" && cur && cur.kpos && cur.kpos.ww != null && typeof tsItems === "function"){ const it = tsItems("ww")[cur.kpos.ww]; if (it) tsMark("ww", it); }
@@ -2451,9 +2457,8 @@ LINKED.forEach(id => {
   view.addEventListener("click", e => {
     const b = e.target.closest(".tslink");
     const fb = e.target.closest(".wwflag");
-    if (fb){                                                               /* flag the line it ends */
-      const lines = [], walk = n => { for (const c of n.childNodes){ if (c === fb) return true; if (c.nodeType === 3) lines.push(c.nodeValue); else if (c.nodeType === 1 && !c.classList.contains("wwflag") && walk(c)) return true; } return false; };
-      walk(view); const before = lines.join(""), line = (before.split("\n").pop() || "").trim();
+    if (fb){                                                               /* flag the line it starts */
+      const line = (fb.closest(".wwline").textContent || "").trim();
       if (line && flagToggle(cur, { k: "w:" + line, kind: "w", text: line })) flagOpen("w:" + line, view);
       return;
     }
