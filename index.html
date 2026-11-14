@@ -1358,7 +1358,24 @@ function megaFind(node, id){
   for (const c of node.children || []){ const r = megaFind(c, id); if (r) return r; }
   return null;
 }
-async function megaNode(url){
+/* When a link's item is gone (the video was replaced, so it got a new ID, and the sheet wasn't updated), find the
+   video by the folder layout instead: <task ID>/<column folder>/<video>, e.g. c5f74217/generated_video/final_edit.mp4 */
+const COL_DIRS = { src: ["input_files", "source_clips", "source clips"], gold: ["golden_edit_video", "golden_edit"], gen: ["generated_video", "generated"] };
+const isVid = f => !f.directory && /\.(mov|mp4|m4v|webm|mkv)$/i.test(f.name || "");
+function megaByLayout(root, hint){
+  const want = (hint.task || "").trim().toLowerCase(); if (!want) return null;
+  let taskDir = null;
+  const walk = d => { if (taskDir || !d.directory) return; if ((d.name || "").trim().toLowerCase() === want){ taskDir = d; return; } (d.children || []).forEach(walk); };
+  walk(root);
+  if (!taskDir) return null;
+  const names = (COL_DIRS[hint.k] || []).concat(hint.col ? [hint.col] : []).map(n => n.toLowerCase());
+  const colDir = (taskDir.children || []).find(c => c.directory && names.includes((c.name || "").trim().toLowerCase()));
+  if (!colDir) return null;
+  if (hint.k === "src") return { node: colDir, path: taskDir.name + "/" + colDir.name };
+  const vids = (colDir.children || []).filter(isVid).sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));   /* newest first */
+  return vids.length ? { node: vids[0], path: taskDir.name + "/" + colDir.name + "/" + vids[0].name } : null;
+}
+async function megaNode(url, hint = null){
   const link = parseMegaLink(url);
   if (!link) throw new Error("Not a MEGA folder link: " + (url || "(empty)"));
   let root = await megaRoot(link);
@@ -1369,6 +1386,10 @@ async function megaNode(url){
     const lib = await megaLib();
     try { node = await lib.File.fromURL("https://mega.nz/folder/" + link.root + "#" + link.key + "/file/" + link.node).loadAttributes(); }
     catch (e) { node = null; }
+  }
+  if (!node && link.node && hint){
+    const found = megaByLayout(root, hint);
+    if (found){ node = found.node; if (hint.used) hint.used.push(found.path); }
   }
   if (!node){
     /* say what the shared link actually shows, so it's clear whether recent uploads are visible through it at all */
@@ -1479,9 +1500,10 @@ async function megaLoadInner(opts){
   if (!want.length){ flash("This task has no MEGA links in its source clips, golden edit or generated video columns."); return false; }
   megaBusy = true; megaPanel("Finding this task's videos on MEGA…", []);
   let items = [];
+  const usedLayout = [];
   try {
     for (const [k, label] of want){
-      const node = await megaNode(sc(t.n, k));
+      const node = await megaNode(sc(t.n, k), { task: t.id, k, col: COL[k], used: usedLayout });
       if (k === "src"){
         const files = node.directory ? (node.children || []).filter(f => !f.directory && /\.(mov|mp4|m4v|webm|mkv)$/i.test(f.name || "")) : [node];
         files.sort((a, b) => (a.name || "").localeCompare(b.name || "", undefined, { numeric: true, sensitivity: "base" }));
@@ -1492,6 +1514,7 @@ async function megaLoadInner(opts){
   } catch (e) {
     megaBusy = false; megaPanel("Couldn't read this task's MEGA links", [], megaErr(e)); return false;
   }
+  if (usedLayout.length) note("Some of this task's MEGA links in the sheet are out of date (the videos were replaced), so the app used the current files instead: " + usedLayout.join(", ") + ". Update the links in the sheet when you can.");
   const link0 = parseMegaLink(sc(t.n, want[0][0]));
   if (await canStream()){
     /* stream: the players start right away and only fetch what is watched */
