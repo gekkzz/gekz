@@ -191,10 +191,11 @@ tr.flashrow{outline:2px solid #7cc4ff;outline-offset:-2px}
 .sbsbar{display:flex;gap:8px;flex-wrap:wrap;padding:0 0 12px}
 /* narrower halves: tighter buttons so each half's row stays on one line and the boxes below line up */
 .sbshalf{container-type:inline-size}
-@container (max-width:800px){.sbsbar{gap:6px}.sbsbar .subbtn{padding:6px 9px;font-size:13.5px}.sbsbar .bfsb{width:24px}.sbsbar .bfsval{min-width:34px}}
-@container (max-width:660px){.sbsbar{gap:5px}.sbsbar .subbtn{padding:5px 7px;font-size:12.5px}.sbsbar .bfsval{min-width:30px;font-size:11.5px}}
+@container (max-width:900px){.sbsbar{gap:6px}.sbsbar .subbtn{padding:6px 9px;font-size:13.5px}.sbsbar .bfsb{width:24px}.sbsbar .bfsval{min-width:34px}}
+@container (max-width:760px){.sbsbar{gap:5px}.sbsbar .subbtn{padding:5px 7px;font-size:12.5px}.sbsbar .bfsval{min-width:30px;font-size:11.5px}}
 .sbsbar .sub.back{border-style:dashed}
 .sbsbody{min-width:0}
+.sbsbody.flg{overflow:auto;border:1px solid var(--line);border-radius:10px;background:var(--panel)}
 .sbsbody.rub{position:sticky;top:12px;max-height:calc(100vh - 24px);overflow:auto;border:1px solid var(--line);border-radius:10px;background:var(--panel)}
 .sbsnote{padding:48px 18px;text-align:center;color:var(--mut);border:1px dashed var(--line);border-radius:10px}
 .sbsnote[hidden]{display:none}
@@ -228,6 +229,35 @@ tr.flashrow{outline:2px solid #7cc4ff;outline-offset:-2px}
 /* notes with clickable timestamps: shown as text with links; click anywhere else to edit */
 .notesview{white-space:pre-wrap;overflow-wrap:anywhere;cursor:text;border:1px solid var(--line);border-radius:8px;color:var(--fg);font:inherit;font-size:14px}
 .notesview .ph{color:var(--mut)}
+/* ---------- flags ---------- */
+.flagb{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:5px;padding:4px 9px;border:2px solid #6a645a;border-radius:6px;font-size:13px;color:var(--mut);margin-right:8px;vertical-align:middle}
+.flagb:hover{color:var(--fg)}
+.flagb.on,.wwflag.on{border-color:#c77a2e;color:#f0a35e;background:rgba(199,122,46,.14)}
+.wwflag{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:4px;margin-left:6px;padding:0 7px;border:1.5px solid #6a645a;border-radius:6px;font-size:12px;line-height:18px;color:var(--mut);vertical-align:1px;white-space:nowrap}
+.wwflag::after{content:"Flag"}
+.wwflag.on::after{content:"Flagged"}
+.wwflag:hover{color:var(--fg)}
+#body tr.flagged > td:first-child{box-shadow:inset 3px 0 0 #c77a2e}
+.flagsstage{padding:14px 16px;display:flex;flex-direction:column;gap:12px;font-size:14px}
+.fhead{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.fhead b{font-size:15px}
+.fhead .fhbtns{display:flex;align-items:center;gap:8px}
+.fcard{border:1px solid var(--line);border-radius:10px;padding:12px 14px;background:var(--bg);display:flex;flex-direction:column;gap:8px}
+.fsrc{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.ftag{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:#f0a35e;border:1.5px solid #c77a2e;border-radius:999px;padding:2px 10px;background:rgba(199,122,46,.12);text-decoration:none}
+.ftag.tslink{cursor:pointer;color:#f0a35e;text-decoration:none}
+.ftag.tslink:hover{filter:brightness(1.2)}
+.fquote{color:var(--mut);font-size:13px;line-height:1.5;border-left:2px solid var(--line);padding-left:10px;white-space:pre-wrap}
+.fquote .fl{color:var(--mut);font-size:12px}
+.fwhy{font:inherit;font-weight:700;color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:var(--panel);line-height:1.4;resize:none;overflow:hidden;min-height:20px}
+.fwhy::placeholder{font-weight:400;font-style:italic;color:var(--mut)}
+.fbtns{display:flex;gap:8px;justify-content:flex-end;align-items:center}
+.fbtn{all:unset;cursor:pointer;padding:4px 12px;border:2px solid var(--liveblue);border-radius:7px;font-size:13px;color:var(--fg)}
+.fbtn.quiet{border-color:#6a645a;color:var(--mut)}
+.fbtn:hover{filter:brightness(1.2)}
+.fempty{color:var(--mut);line-height:1.6;padding:8px 2px}
+.fcard.fnew{animation:fnew 1.5s ease-out}
+@keyframes fnew{0%{border-color:#c77a2e;box-shadow:0 0 0 3px rgba(199,122,46,.35)}100%{box-shadow:0 0 0 0 rgba(199,122,46,0)}}
 .chip.kcur{background:var(--liveblue);color:#fff}                       /* the timestamp E replays / R moved to */
 .tslink.kcur{background:rgba(44,106,184,.35);text-decoration-thickness:2px}
 .tslink{cursor:pointer;color:#8ab4f8;border-radius:3px;text-decoration:underline;text-decoration-color:rgba(138,180,248,.5);text-underline-offset:2px}
@@ -462,6 +492,7 @@ td.id{width:64px}
   </div>
 </section>
 
+<div id="flagsHome" hidden><div id="flagsStage" class="flagsstage"></div></div>
 <section id="p-verdicts" hidden>
   <div class="split even">
     <div class="stage">
@@ -721,14 +752,14 @@ function draw(){
   const rows = cur ? cur.rows : [];
   $("body").innerHTML = rows.map((r, n) => {
     const t = (k, ph) => `<textarea rows="1" spellcheck="false" placeholder="${ph || "\u2014"}" data-n="${n}" data-k="${k}"></textarea>`;
-    return `<tr class="k${r.kind}"><td class="id" data-label="ID">${t("id")}</td>
+    return `<tr class="k${r.kind}${flagHas(cur, rowKey(r, n)) ? " flagged" : ""}"><td class="id" data-label="ID">${t("id")}</td>
       <td class="kind" data-label="Type"><button class="kindb ${r.kind}" data-n="${n}" title="Switch between positive (I) and negative (E)">${r.kind === "E" ? "Negative" : "Positive"}</button></td>
       <td class="w" data-label="Weight">${t("w")}</td>
       <td class="crit" data-label="Criterion">${t("crit")}</td>
       <td class="c-ts" data-label="Timestamps">${t("ts", "No timestamps")}<div class="chips">${chipsHTML(r, n)}</div></td>
       <td class="c-ev"><div class="ev"><button class="p${r.ev==="p"?" on":""}" data-n="${n}" data-v="p">Pass</button><button class="f${r.ev==="f"?" on":""}" data-n="${n}" data-v="f">Fail</button></div></td>
       <td class="c-why" data-label="Reason">${t("why", "Reason for the verdict")}</td>
-      <td class="act"><button class="del" data-n="${n}" aria-label="Delete row ${escA(r.id || n + 1)}">Delete</button></td></tr>`;
+      <td class="act"><button class="flagb${flagHas(cur, rowKey(r, n)) ? " on" : ""}" data-n="${n}" title="Flag this row (copied from the Flags tab)">${FLAG_SVG}<span>${flagHas(cur, rowKey(r, n)) ? "Flagged" : "Flag"}</span></button><button class="del" data-n="${n}" aria-label="Delete row ${escA(r.id || n + 1)}">Delete</button></td></tr>`;
   }).join("");
   document.querySelectorAll("#body textarea").forEach(a => { a.value = rowOf(a)[a.dataset.k] || ""; fit(a); mark(a); });
   score();
@@ -772,6 +803,7 @@ $("body").addEventListener("click", e => {
       warmFocus(row); if (i >= 0){ tsSet("rub", i); tsMark("rub", list[i]); } }
     viewSpec(b.dataset.t); return;
   }
+  if (b.classList.contains("flagb")){ const r = cur.rows[n]; if (r){ const k = rowKey(r, n); if (flagToggle(cur, { k, kind: "r", id: (r.id || "").trim(), text: (r.crit || "").trim(), ts: (r.ts || "").trim() })) flagOpen(k, b); } return; }
   if (b.classList.contains("chipcopy")){ copyText((cur.rows[n].ts || "").trim(), b.nextElementSibling); return; }
   if (b.classList.contains("del")){
     const r = cur.rows[n];
@@ -1229,6 +1261,106 @@ $("upSrc").addEventListener("change", e => {
   setSingle(k, f, f.name); note("");
 }));
 
+/* ---------- flags: mark rubric rows and Went Wrong lines that are wrong, note why, and copy them for the sheet ----------
+   Kept in this browser only (per CSV and task), never put in the downloaded CSV. A rubric flag follows the row's ID;
+   a Went Wrong flag follows the line's text (editing that line leaves the flag in the list with the old wording). */
+const FLAG_SVG = '<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M5 3h2v18H5zM8 4h10l-2.5 4L18 12H8z"/></svg>';
+const FLAG_STORE = "rr-flags", FLAG_KEEP_DAYS = 30;
+let flagCache = null;
+function flagsAll(){
+  if (!flagCache){ try { flagCache = JSON.parse(localStorage.getItem(FLAG_STORE) || "{}") || {}; } catch (_) { flagCache = {}; }
+    const cut = Date.now() - FLAG_KEEP_DAYS * 864e5; Object.keys(flagCache).forEach(h => { if (!(flagCache[h] && flagCache[h].at > cut)) delete flagCache[h]; }); }
+  return flagCache;
+}
+function flagsSave(){ clearTimeout(flagsSave._t); flagsSave._t = setTimeout(() => { try { localStorage.setItem(FLAG_STORE, JSON.stringify(flagsAll())); } catch (_) {} }, 300); }
+function flagsOf(t){
+  if (!t || !t.id || !sheetHash) return [];
+  const all = flagsAll(), s = all[sheetHash] || (all[sheetHash] = { at: Date.now(), t: {} });
+  return s.t[t.id] || (s.t[t.id] = []);
+}
+const rowKey = (r, n) => "r:" + ((r.id || "").trim() || "#" + (n + 1));
+const flagHas = (t, k) => flagsOf(t).some(f => f.k === k);
+function flagToggle(t, f){
+  const list = flagsOf(t), i = list.findIndex(x => x.k === f.k);
+  if (i >= 0) list.splice(i, 1); else list.push(Object.assign({ why: "", at: Date.now() }, f));
+  flagsAll()[sheetHash].at = Date.now(); flagsSave();
+  flagsRefresh();
+  return i < 0;                                                            /* true = just flagged */
+}
+/* after flagging: show the Flags tab in the other half with the cursor in that flag's reason box */
+function flagOpen(k, fromEl){
+  const inRub = !!fromEl.closest("#rubricBox"), inBad = !!fromEl.closest("#badStage");
+  if (curTab !== "sbs") showTab("sbs");
+  const avoid = inRub ? sbsOwner("rubric") : inBad ? sbsOwner("bad") : -1;
+  const target = avoid >= 0 ? 1 - avoid : sbsOwner("flags") >= 0 ? sbsOwner("flags") : 1;
+  if (sbsOwner("flags") !== target) sbsPick(target, "flags"); else renderFlags();
+  const card = [...$("flagsStage").querySelectorAll(".fcard")].find(c => c.dataset.k === k); if (!card) return;
+  const box = sbsBody(target), ta = card.querySelector(".fwhy");
+  box.scrollTop += card.getBoundingClientRect().top - box.getBoundingClientRect().top - 12;
+  ta.focus({ preventScroll: true }); ta.setSelectionRange(ta.value.length, ta.value.length);
+  card.classList.remove("fnew"); void card.offsetWidth; card.classList.add("fnew"); setTimeout(() => card.classList.remove("fnew"), 1600);
+}
+/* order: rubric flags in row order, then Went Wrong flags in the order the lines appear */
+function flagsSorted(t){
+  const rows = t.rows, lines = ($("notesBad").value || "").split("\n").map(x => x.trim());
+  const pos = f => f.kind === "r" ? (() => { const i = rows.findIndex((r, n) => rowKey(r, n) === f.k); return i < 0 ? 5e5 : i; })()
+                                   : 1e6 + (() => { const i = lines.indexOf(f.text); return i < 0 ? 5e5 : i; })();
+  return flagsOf(t).slice().sort((a, b) => pos(a) - pos(b) || a.at - b.at);
+}
+const flagLabel = f => f.kind === "r" ? (f.id || f.k.slice(2)) : "Went Wrong";
+const flagPlain = f => flagLabel(f) + " \u2014 " + f.text + (f.why.trim() ? "\n" + f.why.trim() : "");
+const flagHTML = f => esc(flagLabel(f)) + " \u2014 " + esc(f.text) + (f.why.trim() ? "<br><b>" + esc(f.why.trim()).replace(/\n/g, "<br>") + "</b>" : "");
+/* copied as rich text (one spreadsheet cell, reason in bold) with plain text alongside for places that don't take formatting */
+async function copyRich(plain, html, tip){
+  try {
+    if (!window.ClipboardItem || !navigator.clipboard || !navigator.clipboard.write) throw 0;
+    const cell = '<table><tr><td>' + html + '</td></tr></table>';
+    await navigator.clipboard.write([new ClipboardItem({ "text/plain": new Blob([plain], { type: "text/plain" }), "text/html": new Blob([cell], { type: "text/html" }) })]);
+    if (tip){ tip.textContent = "Copied"; clearTimeout(tip._t); tip._t = setTimeout(() => { tip.textContent = ""; }, 1300); }
+  } catch (_) { copyText(plain, tip); }
+}
+function flagsRefresh(){
+  if (!cur) return;
+  /* rubric row buttons */
+  rowEls().forEach((tr, n) => { const r = cur.rows[n], b = tr.querySelector(".flagb"); if (!r || !b) return; const on = flagHas(cur, rowKey(r, n));
+    b.classList.toggle("on", on); b.querySelector("span").textContent = on ? "Flagged" : "Flag"; tr.classList.toggle("flagged", on); });
+  /* Went Wrong line buttons */
+  const ta = $("notesBad"); if (ta.hidden) renderNoteView(ta);
+  /* tab label + panel */
+  if (curTab === "sbs") [0, 1].forEach(h => { const b = $("sbsBar" + h).querySelector('button[data-sel="flags"]'); if (b){ const n = flagsOf(cur).length; b.textContent = "Flags" + (n ? " (" + n + ")" : ""); } });
+  renderFlags();
+}
+function renderFlags(){
+  const st = $("flagsStage"); if (!st || st.parentNode === $("flagsHome")) return;
+  if (!cur){ st.innerHTML = '<div class="fempty">Open a task to see its flags.</div>'; return; }
+  const list = flagsSorted(cur);
+  if (!list.length){ st.innerHTML = '<div class="fhead"><b>Flags</b></div><div class="fempty">No flags for this task yet. Use the <b>Flag</b> button on a rubric row or at the end of a Went Wrong line, then note what\u2019s wrong here and copy it for the sheet. Flags stay in this browser and are never added to the downloaded CSV.</div>'; return; }
+  st.innerHTML = '<div class="fhead"><b>' + list.length + ' flag' + (list.length === 1 ? "" : "s") + ' \u00b7 this task</b><span class="fhbtns"><span class="tip" aria-live="polite"></span><button class="fbtn" type="button" data-fact="all">Copy all</button></span></div>'
+    + list.map(f => '<div class="fcard" data-k="' + escA(f.k) + '"><div class="fsrc">'
+        + (f.kind === "r" && f.id ? '<span class="ftag tslink" data-row="' + escA(f.id) + '" title="Show this row">' + FLAG_SVG + ' Rubric ' + esc(f.id) + '</span>' : '<span class="ftag">' + FLAG_SVG + ' ' + esc(f.kind === "r" ? "Rubric " + flagLabel(f) : "Went Wrong") + '</span>')
+        + '<button class="fbtn quiet" type="button" data-fact="rm">Remove</button></div>'
+        + '<div class="fquote">' + linkify(f.text) + (f.kind === "r" && f.ts ? '\n<span class="fl">Timestamps:</span> ' + linkify(f.ts) : "") + '</div>'
+        + '<textarea class="fwhy" rows="1" spellcheck="true" placeholder="What\u2019s wrong? (copied in bold)"></textarea>'
+        + '<div class="fbtns"><span class="tip" aria-live="polite"></span><button class="fbtn" type="button" data-fact="copy">Copy</button></div></div>').join("");
+  st.querySelectorAll(".fcard").forEach(c => { const f = list.find(x => x.k === c.dataset.k), ta = c.querySelector(".fwhy"); ta.value = f.why; fitWhy(ta); });
+}
+const fitWhy = ta => { ta.style.height = "auto"; ta.style.height = ta.scrollHeight + "px"; };
+$("flagsStage").addEventListener("input", e => {
+  const ta = e.target.closest(".fwhy"); if (!ta || !cur) return;
+  const f = flagsOf(cur).find(x => x.k === ta.closest(".fcard").dataset.k); if (!f) return;
+  f.why = ta.value; flagsAll()[sheetHash].at = Date.now(); flagsSave(); fitWhy(ta);
+});
+$("flagsStage").addEventListener("click", e => {
+  if (!cur) return;
+  const link = e.target.closest(".tslink"); if (link){ openLink(link, $("flagsStage")); return; }
+  const b = e.target.closest("[data-fact]"); if (!b) return;
+  const card = b.closest(".fcard"), tip = b.parentNode.querySelector(".tip");
+  if (b.dataset.fact === "all"){ const list = flagsSorted(cur); copyRich(list.map(flagPlain).join("\n\n"), list.map(flagHTML).join("<br><br>"), tip); return; }
+  const f = flagsOf(cur).find(x => x.k === card.dataset.k); if (!f) return;
+  if (b.dataset.fact === "copy") copyRich(flagPlain(f), flagHTML(f), tip);
+  if (b.dataset.fact === "rm") flagToggle(cur, f);
+});
+
 /* ---------- E / R: replay the current timestamp / play the next one ----------
    Follows the rubric top to bottom, left to right within a row (like the preloaders), skipping rows the filter hides.
    While Went Wrong is on screen (Side by Side half or Verdicts), it goes through Went Wrong's generated-video
@@ -1238,7 +1370,7 @@ function tsItems(mode){
   if (!cur) return [];
   if (mode === "ww"){
     const out = [], txt = $("notesBad").value || "";
-    txt.replace(NOTE_RE, (m, clip, a, b) => { if (a != null && !clip) out.push({ gen: +a, end: +b }); return m; });
+    txt.replace(NOTE_RE, (m, clip, a, b, rid, one) => { if (a != null && !clip) out.push({ gen: +a, end: +b }); else if (one != null) out.push({ gen: +one, end: null }); return m; });
     return out;
   }
   const els = rowEls(), out = [];
@@ -1253,7 +1385,7 @@ function tsMark(mode, it){
   if (!it) return;
   if (mode === "ww"){
     const view = $("notesBad")._view; if (!view) return;
-    const link = [...view.querySelectorAll(".tslink[data-gen]")].find(b => +b.dataset.gen === it.gen && +b.dataset.end === it.end);
+    const link = [...view.querySelectorAll(".tslink[data-gen]")].find(b => +b.dataset.gen === it.gen && (b.dataset.end ? +b.dataset.end : null) === it.end);
     if (link) link.classList.add("kcur");
     return;
   }
@@ -1272,7 +1404,7 @@ function tsSet(mode, i){ if (cur){ cur.kpos = cur.kpos || {}; cur.kpos[mode] = i
 function tsStep(dir){
   if (!cur) return;
   const mode = wwShown() ? "ww" : "rub", list = tsItems(mode);
-  if (!list.length){ flash(mode === "ww" ? "Went Wrong has no generated-video timestamps (like 4.00-6.20s)." : "This task's rubric has no timestamps" + (rfilter !== "all" ? " in the rows shown." : ".")); return; }
+  if (!list.length){ flash(mode === "ww" ? "Went Wrong has no generated-video timestamps (like 4.00-6.20s or 4.20)." : "This task's rubric has no timestamps" + (rfilter !== "all" ? " in the rows shown." : ".")); return; }
   cur.kpos = cur.kpos || {};
   const was = cur.kpos[mode];
   let i = (was == null || was < 0) ? 0 : Math.min(was, list.length - 1) + dir;   /* nothing played yet: E and R both start at the first */
@@ -1894,8 +2026,8 @@ $("body").addEventListener("input", tcStaleCheck);
 $("body").addEventListener("click", () => setTimeout(tcStaleCheck));
 
 /* ---------- Side by Side: two halves, each showing the rubric, a source clip, the golden edit or the generated video ---------- */
-const SBS_ITEMS = [["src", "Source Clips"], ["gold", "Golden Edit"], ["gen", "Generated Video"], ["rubric", "Rubric"], ["bad", "Went Wrong"]];
-const SBS_NAME = { rubric: "The rubric", src: "The source clip", gold: "The golden edit", gen: "The generated video", bad: "Went Wrong" };
+const SBS_ITEMS = [["src", "Source Clips"], ["gold", "Golden Edit"], ["gen", "Generated Video"], ["rubric", "Rubric"], ["bad", "Went Wrong"], ["flags", "Flags"]];
+const SBS_NAME = { rubric: "The rubric", src: "The source clip", gold: "The golden edit", gen: "The generated video", bad: "Went Wrong", flags: "Flags" };
 const SBS_EMPTY = { src: "No source clips for this task yet. Use Load videos from MEGA, or Upload Source Clips.",
   gold: "No golden edit for this task yet. Use Load videos from MEGA, or Upload Golden Edit.",
   gen: "No generated video for this task yet. Use Load videos from MEGA, or Upload Generated." };
@@ -1947,7 +2079,8 @@ function sbsBar(h){
     return btn("", 'data-sel="src"', "Source Clips", true)
       + v.clips.map((c, i) => btn("", `data-clip="${i}" title="${escA(c.name)}"`, stem(c.name), c === v.active)).join("")
       + btn(" back", 'data-back="1"', "Back", false);
-  return SBS_ITEMS.map(([k, label]) => btn("", `data-sel="${k}"`, k === "src" && v.clips.length ? label + " (" + v.clips.length + ")" : label, half.sel === k)).join("")
+  const nf = cur ? flagsOf(cur).length : 0;
+  return SBS_ITEMS.map(([k, label]) => btn("", `data-sel="${k}"`, k === "src" && v.clips.length ? label + " (" + v.clips.length + ")" : k === "flags" && nf ? label + " (" + nf + ")" : label, half.sel === k)).join("")
     + ((half.sel === "gold" || half.sel === "gen") && v[half.sel] && sbsOwner(half.sel) === h
        ? btn(" szc", 'data-sz="1" title="Outline the Instagram Reels safe zone on the video"', "Safe Zone Checker", safeZone) : "")
     + (half.sel === "bad" && sbsOwner("bad") === h
@@ -1997,18 +2130,21 @@ function sbsRender(pos){
   const v = V();
   /* what each half shows */
   const want = new Map();     /* element -> half */
-  let rubricHalf = -1, badHalf = -1;
+  let rubricHalf = -1, badHalf = -1, flagsHalf = -1;
   [0, 1].forEach(h => {
     const s = halves[h].sel, body = sbsBody(h), noteEl = body.querySelector(".sbsnote");
     $("sbsBar" + h).innerHTML = sbsBar(h);
     body.classList.toggle("rub", s === "rubric" && sbsOwner(s) === h);
+    body.classList.toggle("flg", s === "flags" && sbsOwner(s) === h);
     let msg = "";
     if (sbsOwner(s) !== h) msg = SBS_NAME[s] + " is showing on the " + (h ? "left" : "right") + ".";
     else if (s === "rubric") rubricHalf = h;
     else if (s === "bad") badHalf = h;
+    else if (s === "flags") flagsHalf = h;
+    const media = s !== "rubric" && s !== "bad" && s !== "flags";
     let html = null;
-    if (sbsOwner(s) === h && s !== "rubric" && s !== "bad" && !hostOf(v, s) && sheet) html = sbsEmptyHTML(s);
-    else if (sbsOwner(s) === h && s !== "rubric" && s !== "bad"){ const el = hostOf(v, s); if (el) want.set(el, h); else msg = !sheet ? (sbsOwner("rubric") < 0 && h === 0 ? $("empty").textContent : "") : SBS_EMPTY[s]; }   /* before a CSV: the welcome text shows once */
+    if (sbsOwner(s) === h && media && !hostOf(v, s) && sheet) html = sbsEmptyHTML(s);
+    else if (sbsOwner(s) === h && media){ const el = hostOf(v, s); if (el) want.set(el, h); else msg = !sheet ? (sbsOwner("rubric") < 0 && h === 0 ? $("empty").textContent : "") : SBS_EMPTY[s]; }   /* before a CSV: the welcome text shows once */
     if (html != null){ noteEl.innerHTML = html; noteEl.hidden = false; } else { noteEl.textContent = msg; noteEl.hidden = !msg; }
   });
   /* videos not shown in a half go back to their own tabs (moving a video pauses it, so only move what changes) */
@@ -2019,6 +2155,8 @@ function sbsRender(pos){
   else moveTo(rubricBox, $("rubricPark"));
   if (badHalf >= 0) moveTo($("badStage"), sbsBody(badHalf), sbsBody(badHalf).querySelector(".sbsnote"));
   else badHome();
+  if (flagsHalf >= 0){ moveTo($("flagsStage"), sbsBody(flagsHalf), sbsBody(flagsHalf).querySelector(".sbsnote")); renderFlags(); }
+  else moveTo($("flagsStage"), $("flagsHome"));
   slots.sbs = rubricHalf >= 0 ? sbsBody(rubricHalf) : $("rubricPark");
   autoVidH();
   szApply();
@@ -2185,7 +2323,7 @@ window.addEventListener("resize", queueLiveBars);
 /* ---------- fit the boxes to the screen (every tab but Rubric): each box ends at the bottom of the window and
    scrolls inside itself, so the page doesn't scroll. Only a box made taller by hand (the video edge, a notes
    box's corner) can make the page longer. ---------- */
-var FIT_SEL = ".side, .sbsbody.rub, .notes";   /* var: may be used by code that runs before this line */
+var FIT_SEL = ".side, .sbsbody.rub, .sbsbody.flg, .notes";   /* var: may be used by code that runs before this line */
 function fitPanes(){
   if (!FIT_SEL) return;
   const narrow = window.innerWidth <= 960, all = [...document.querySelectorAll(FIT_SEL)];
@@ -2204,20 +2342,33 @@ if (window.ResizeObserver){ const ro = new ResizeObserver(() => { autoVidH(); fi
    The notes show as text with links: "out 4.00-6.20s" style times open the generated video at that moment,
    "Clip 3 0:55.20-0:57.40" opens that source clip. Clicking anywhere else edits the text right there. */
 var LINKED = ["notesMulti", "notesGood", "notesBad"];
-const NOTE_RE = /([Cc][Ll][Ii][Pp]\s*\d+\s+(?:\d+:)?\d+:[0-5]\d(?:\.\d{1,3})?(?:\s*(?:-|–|—|to)\s*(?:\d+:)?\d+:[0-5]\d(?:\.\d{1,3})?)?)|(?<![\d:.])(\d{1,4}\.\d{1,3})\s*-\s*(\d{1,4}\.\d{1,3})s?(?![\d:.])|\b([IE]\d{1,3})\b/g;   /* clip moment | generated-video moment | rubric ID (I4, E1) */
-function renderNoteView(ta){
-  const view = ta._view, txt = ta.value; if (!view) return;
+const NOTE_RE = /([Cc][Ll][Ii][Pp]\s*\d+\s+(?:\d+:)?\d+:[0-5]\d(?:\.\d{1,3})?(?:\s*(?:-|–|—|to)\s*(?:\d+:)?\d+:[0-5]\d(?:\.\d{1,3})?)?)|(?<![\d:.])(\d{1,4}\.\d{1,3})\s*-\s*(\d{1,4}\.\d{1,3})s?(?![\d:.])|\b([IE]\d{1,3})\b|(?<![\d:.$])(\d{1,4}\.\d{2})s?(?![\d:.%\-–—x])/g;   /* clip moment | generated-video moment | rubric ID (I4, E1) | single generated-video time (4.20, 12.75s) */
+function linkify(txt){
   let html = "", last = 0;
-  txt.replace(NOTE_RE, (m, clip, a, b, rid, off) => {
+  txt.replace(NOTE_RE, (m, clip, a, b, rid, one, off) => {
     html += esc(txt.slice(last, off));
     html += rid
       ? '<span role="button" tabindex="0" class="tslink" data-row="' + rid + '" title="Show rubric row ' + rid + '">' + esc(m) + '</span>'
       : clip
       ? '<span role="button" tabindex="0" class="tslink" data-spec="' + escA(clip.replace(/\s+/g, " ")) + '" title="Show this moment in the source clip">' + esc(m) + '</span>'
+      : one
+      ? '<span role="button" tabindex="0" class="tslink" data-gen="' + one + '" title="Show this moment in the generated video">' + esc(m) + '</span>'
       : '<span role="button" tabindex="0" class="tslink" data-gen="' + a + '" data-end="' + b + '" title="Show this moment in the generated video">' + esc(m) + '</span>';   /* spans, so a link can wrap like the text around it */
     last = off + m.length; return m;
   });
-  html += esc(txt.slice(last));
+  return html + esc(txt.slice(last));
+}
+/* open what a link points at, in the half opposite el (or wherever it fits outside Side by Side) */
+function openLink(b, el){
+  const h = halfOf(el);
+  if (b.dataset.row) viewRow(b.dataset.row, h); else if (b.dataset.spec) viewSpec(b.dataset.spec, h); else viewGen(+b.dataset.gen, h, b.dataset.end ? +b.dataset.end : null);
+}
+function renderNoteView(ta){
+  const view = ta._view, txt = ta.value; if (!view) return;
+  let html;
+  if (ta.id === "notesBad" && cur){                                         /* Went Wrong: a Flag button at the end of each line/paragraph */
+    html = txt.split("\n").map(line => linkify(line) + (line.trim() ? '<button type="button" class="wwflag' + (flagHas(cur, "w:" + line.trim()) ? " on" : "") + '" aria-label="Flag this">' + FLAG_SVG + '</button>' : "")).join("\n");
+  } else html = linkify(txt);
   view.innerHTML = txt ? html : '<span class="ph">' + esc(ta.placeholder) + '</span>';
   if (ta.id === "notesBad" && cur && cur.kpos && cur.kpos.ww != null && typeof tsItems === "function"){ const it = tsItems("ww")[cur.kpos.ww]; if (it) tsMark("ww", it); }
 }
@@ -2293,9 +2444,16 @@ LINKED.forEach(id => {
   };
   view.addEventListener("click", e => {
     const b = e.target.closest(".tslink");
+    const fb = e.target.closest(".wwflag");
+    if (fb){                                                               /* flag the line it ends */
+      const lines = [], walk = n => { for (const c of n.childNodes){ if (c === fb) return true; if (c.nodeType === 3) lines.push(c.nodeValue); else if (c.nodeType === 1 && !c.classList.contains("wwflag") && walk(c)) return true; } return false; };
+      walk(view); const before = lines.join(""), line = (before.split("\n").pop() || "").trim();
+      if (line && flagToggle(cur, { k: "w:" + line, kind: "w", text: line })) flagOpen("w:" + line, view);
+      return;
+    }
     if (b){
-      if (b.dataset.gen != null && id === "notesBad"){ const list = tsItems("ww"), i = list.findIndex(x => x.gen === +b.dataset.gen && x.end === +b.dataset.end); if (i >= 0){ tsSet("ww", i); tsMark("ww", list[i]); } }
-      if (b.dataset.row) viewRow(b.dataset.row, halfOf(view)); else if (b.dataset.spec) viewSpec(b.dataset.spec, halfOf(view)); else viewGen(+b.dataset.gen, halfOf(view), +b.dataset.end); return;
+      if (b.dataset.gen != null && id === "notesBad"){ const end = b.dataset.end ? +b.dataset.end : null, list = tsItems("ww"), i = list.findIndex(x => x.gen === +b.dataset.gen && x.end === end); if (i >= 0){ tsSet("ww", i); tsMark("ww", list[i]); } }
+      openLink(b, view); return;
     }
     const sel = window.getSelection(); if (sel && !sel.isCollapsed && view.contains(sel.anchorNode)) return;   /* selecting text to copy */
     edit(caretOffset(view, e.clientX, e.clientY));
