@@ -593,6 +593,7 @@ function load(text, name){
   if (cur) hideVids(cur);
   const oldVids = {}; tasks.forEach(t => { oldVids[t.id] = t; });
   saveNow(); saveKey = null;
+  megaRoots = {};   /* a new sheet may link to files added to the folder since it was last read */
   sheet = { head, rows: rows.slice(1), ix, name };
   tasks = sheet.rows.map((r, i) => (r[ix.id] || "").trim() ? parseTask(i) : null).filter(Boolean);
   /* reloading a sheet keeps videos already loaded for tasks with the same ID */
@@ -1335,9 +1336,14 @@ function parseMegaLink(url){
   const m = /^https?:\/\/(?:www\.)?mega\.(?:nz|co\.nz)\/folder\/([^#\/?]+)#([^\/?]+)(?:\/(folder|file)\/([^\/?#\s]+))?/.exec((url || "").trim());
   return m ? { root: m[1], key: m[2], type: m[3] || "folder", node: m[4] || null } : null;
 }
-async function megaRoot(link){
+/* the shared folder's listing is kept for speed; it is read again when the sheet links to something the kept
+   listing doesn't have (files added to the folder since), and dropped whenever a new CSV is loaded */
+const megaRootAt = {};
+async function megaRoot(link, fresh = false){
   const k = link.root + "#" + link.key;
+  if (fresh && megaRoots[k] && Date.now() - (megaRootAt[k] || 0) > 3000) delete megaRoots[k];
   if (!megaRoots[k]){
+    megaRootAt[k] = Date.now();
     const lib = await megaLib();
     const f = lib.File.fromURL("https://mega.nz/folder/" + link.root + "#" + link.key);
     megaRoots[k] = f.loadAttributes().then(() => f).catch(e => { delete megaRoots[k]; throw e; });
@@ -1355,8 +1361,9 @@ function megaFind(node, id){
 async function megaNode(url){
   const link = parseMegaLink(url);
   if (!link) throw new Error("Not a MEGA folder link: " + (url || "(empty)"));
-  const root = await megaRoot(link);
+  let root = await megaRoot(link);
   let node = link.node ? megaFind(root, link.node) : root;
+  if (!node && link.node){ root = await megaRoot(link, true); node = megaFind(root, link.node); }   /* re-read the folder once */
   if (!node && link.node){
     /* fallback: ask MEGA for that item directly, using the library's own lookup */
     const lib = await megaLib();
