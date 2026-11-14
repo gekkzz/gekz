@@ -687,7 +687,10 @@ function textW(a, str){
   try { if (MEAS){ MEAS.font = getComputedStyle(a).font; const w = MEAS.measureText(str).width; if (w) return w; } } catch (e) {}
   return str.length * 8.5;
 }
-const fit = a => { a.style.height = "auto"; a.style.height = a.scrollHeight + 2 + "px"; };
+/* size a rubric box to its text; a hidden box (filtered-out row, rubric parked) can't be measured, so it is
+   marked and sized when it shows again */
+const fit = a => { if (!a.offsetParent){ a.dataset.unfit = "1"; return; } delete a.dataset.unfit; a.style.height = "auto"; a.style.height = a.scrollHeight + 2 + "px"; };
+const fitPending = () => document.querySelectorAll("#body textarea[data-unfit]").forEach(fit);
 const rowOf = a => cur && cur.rows[+a.dataset.n];
 const mark = a => { const r = rowOf(a); if (r) a.classList.toggle("chg", r[a.dataset.k] !== r.o[a.dataset.k]); };
 const COPY_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h8"/></svg>';
@@ -2058,6 +2061,7 @@ function applyFilter(){
   if (!none){ none = document.createElement("div"); none.className = "rnone"; rubricBox.querySelector(".wrap").after(none); }
   none.textContent = rows.length && !shown ? "No rows match this filter." : "";
   none.classList.toggle("show", !!(rows.length && !shown));
+  fitPending();
   queueLiveBars();
 }
 function setFilter(k){
