@@ -228,6 +228,8 @@ tr.flashrow{outline:2px solid #7cc4ff;outline-offset:-2px}
 /* notes with clickable timestamps: shown as text with links; click anywhere else to edit */
 .notesview{white-space:pre-wrap;overflow-wrap:anywhere;cursor:text;border:1px solid var(--line);border-radius:8px;color:var(--fg);font:inherit;font-size:14px}
 .notesview .ph{color:var(--mut)}
+.chip.kcur{background:var(--liveblue);color:#fff}                       /* the timestamp E replays / R moved to */
+.tslink.kcur{background:rgba(44,106,184,.35);text-decoration-thickness:2px}
 .tslink{cursor:pointer;color:#8ab4f8;border-radius:3px;text-decoration:underline;text-decoration-color:rgba(138,180,248,.5);text-underline-offset:2px}
 .tslink:hover{background:rgba(138,180,248,.16)}
 .tslink.live{background:rgba(56,139,253,.38);color:#fff}
@@ -764,7 +766,12 @@ function textsChanged(){ return tasks.some(t => Object.keys(TEXTS).some(k => t.t
 $("body").addEventListener("click", e => {
   const b = e.target.closest("button"); if (!b || !cur) return;
   const n = +b.dataset.n;
-  if (b.classList.contains("chip")){ const tr = b.closest("tr"), a = tr && tr.querySelector("[data-n]"); if (a) warmFocus(+a.dataset.n); viewSpec(b.dataset.t); return; }
+  if (b.classList.contains("chip")){
+    const tr = b.closest("tr"), a = tr && tr.querySelector("[data-n]");
+    if (a){ const row = +a.dataset.n, spec = b.dataset.t.trim(), list = tsItems("rub"), i = list.findIndex(x => x.row === row && x.spec === spec);
+      warmFocus(row); if (i >= 0){ tsSet("rub", i); tsMark("rub", list[i]); } }
+    viewSpec(b.dataset.t); return;
+  }
   if (b.classList.contains("chipcopy")){ copyText((cur.rows[n].ts || "").trim(), b.nextElementSibling); return; }
   if (b.classList.contains("del")){
     const r = cur.rows[n];
@@ -1007,7 +1014,7 @@ function makePlayer(host, url, name, copyPrefix = ""){
       <button class="mute" aria-label="Mute"></button>
       <input class="vol" type="range" min="0" max="1" step="0.01" aria-label="Volume">
     </div></div><div class="vgrip" role="separator" aria-orientation="horizontal" aria-label="Drag to resize the video" title="Drag to resize · double-click to reset"></div>
-    <div class="keys" aria-label="Keyboard shortcuts"><span><kbd>A</kbd> - Rewind 5s</span><span><kbd>D</kbd> - Forward 5s</span><span><kbd>Space</kbd> - Play/Pause</span><span>Hold A or D to scrub</span></div>`;
+    <div class="keys" aria-label="Keyboard shortcuts"><span><kbd>A</kbd> - Rewind 5s</span><span><kbd>D</kbd> - Forward 5s</span><span><kbd>Space</kbd> - Play/Pause</span><span>Hold A or D to scrub</span><span><kbd>E</kbd> / <kbd>R</kbd> - Replay / next timestamp</span></div>`;
   const q = c => host.querySelector(c);
   q(".vgrip").addEventListener("pointerdown", e => startVidResize(e, q("video")));
   q(".vgrip").addEventListener("dblclick", () => setVidH(null));
@@ -1222,6 +1229,61 @@ $("upSrc").addEventListener("change", e => {
   setSingle(k, f, f.name); note("");
 }));
 
+/* ---------- E / R: replay the current timestamp / play the next one ----------
+   Follows the rubric top to bottom, left to right within a row (like the preloaders), skipping rows the filter hides.
+   While Went Wrong is on screen (Side by Side half or Verdicts), it goes through Went Wrong's generated-video
+   moments ("4.00-6.20s") instead. Clicking a timestamp yourself moves the position there, so R carries on from it. */
+const wwShown = () => curTab === "verdicts" || (curTab === "sbs" && sbsOwner("bad") >= 0);
+function tsItems(mode){
+  if (!cur) return [];
+  if (mode === "ww"){
+    const out = [], txt = $("notesBad").value || "";
+    txt.replace(NOTE_RE, (m, clip, a, b) => { if (a != null && !clip) out.push({ gen: +a, end: +b }); return m; });
+    return out;
+  }
+  const els = rowEls(), out = [];
+  cur.rows.forEach((r, row) => {
+    const tr = els[row]; if (tr && tr.classList.contains("fhide") && getComputedStyle(tr).display === "none") return;
+    (r.ts || "").split(";").forEach(x => { const spec = x.trim(); if (parseTs(spec)) out.push({ row, spec }); });
+  });
+  return out;
+}
+function tsMark(mode, it){
+  document.querySelectorAll(".chip.kcur, .tslink.kcur").forEach(el => el.classList.remove("kcur"));
+  if (!it) return;
+  if (mode === "ww"){
+    const view = $("notesBad")._view; if (!view) return;
+    const link = [...view.querySelectorAll(".tslink[data-gen]")].find(b => +b.dataset.gen === it.gen && +b.dataset.end === it.end);
+    if (link) link.classList.add("kcur");
+    return;
+  }
+  const tr = rowEls()[it.row]; if (!tr) return;
+  const chip = [...tr.querySelectorAll(".chip")].find(c => c.dataset.t.trim() === it.spec);
+  if (chip) chip.classList.add("kcur");
+  if (tr.offsetParent){                                                    /* rubric on screen: keep that row in view */
+    const box = winMode(curTab) ? null : slots[curTab], r = tr.getBoundingClientRect();
+    const top = box ? box.getBoundingClientRect().top : 0, bottom = box ? box.getBoundingClientRect().bottom : window.innerHeight;
+    if (r.top < top + 8 || r.bottom > bottom - 8){
+      if (box) glideTo(box, box.scrollTop + r.top - topLine(curTab)); else glideTo(null, window.scrollY + r.top - 12);
+    }
+  }
+}
+function tsSet(mode, i){ if (cur){ cur.kpos = cur.kpos || {}; cur.kpos[mode] = i; } }
+function tsStep(dir){
+  if (!cur) return;
+  const mode = wwShown() ? "ww" : "rub", list = tsItems(mode);
+  if (!list.length){ flash(mode === "ww" ? "Went Wrong has no generated-video timestamps (like 4.00-6.20s)." : "This task's rubric has no timestamps" + (rfilter !== "all" ? " in the rows shown." : ".")); return; }
+  cur.kpos = cur.kpos || {};
+  const was = cur.kpos[mode];
+  let i = (was == null || was < 0) ? 0 : Math.min(was, list.length - 1) + dir;   /* nothing played yet: E and R both start at the first */
+  if (i >= list.length){ i = list.length - 1; flash("That was the last timestamp. Press E to replay it."); tsMark(mode, list[i]); return; }
+  cur.kpos[mode] = i;
+  const it = list[i];
+  tsMark(mode, it);
+  if (mode === "ww") viewGen(it.gen, halfOf($("notesBad")._view), it.end);
+  else { warmFocus(it.row); viewSpec(it.spec); }
+}
+
 /* ---------- keyboard ---------- */
 const SKIP = 5, HOLD_DELAY = 350, HOLD_EVERY = 200;
 const KEYDIR = { a: -1, arrowleft: -1, d: 1, arrowright: 1 };
@@ -1233,6 +1295,8 @@ function stopHold(){ if (hold){ clearTimeout(hold.t1); clearInterval(hold.t2); h
 function stepBy(dir){ const p = activePlayer(); if (p) p.seekBy(dir * SKIP); else stopHold(); }
 document.addEventListener("keydown", e => {
   if (e.ctrlKey || e.metaKey || e.altKey || typing(e.target)) return;
+  const k0 = (e.key || "").toLowerCase();
+  if (k0 === "e" || k0 === "r"){ e.preventDefault(); if (!e.repeat) tsStep(k0 === "r" ? 1 : 0); return; }
   const p = activePlayer(); if (!p) return;
   if (e.code === "Space"){
     if (/^(BUTTON|LABEL)$/.test(e.target.tagName) || e.target.tagName === "INPUT") return;
@@ -2155,6 +2219,7 @@ function renderNoteView(ta){
   });
   html += esc(txt.slice(last));
   view.innerHTML = txt ? html : '<span class="ph">' + esc(ta.placeholder) + '</span>';
+  if (ta.id === "notesBad" && cur && cur.kpos && cur.kpos.ww != null && typeof tsItems === "function"){ const it = tsItems("ww")[cur.kpos.ww]; if (it) tsMark("ww", it); }
 }
 function renderNoteViews(){ if (!LINKED) return; LINKED.forEach(id => { const ta = $(id); if (ta.hidden) renderNoteView(ta); }); liveUpdate(); }
 function caretOffset(view, x, y){
@@ -2228,7 +2293,10 @@ LINKED.forEach(id => {
   };
   view.addEventListener("click", e => {
     const b = e.target.closest(".tslink");
-    if (b){ if (b.dataset.row) viewRow(b.dataset.row, halfOf(view)); else if (b.dataset.spec) viewSpec(b.dataset.spec, halfOf(view)); else viewGen(+b.dataset.gen, halfOf(view), +b.dataset.end); return; }
+    if (b){
+      if (b.dataset.gen != null && id === "notesBad"){ const list = tsItems("ww"), i = list.findIndex(x => x.gen === +b.dataset.gen && x.end === +b.dataset.end); if (i >= 0){ tsSet("ww", i); tsMark("ww", list[i]); } }
+      if (b.dataset.row) viewRow(b.dataset.row, halfOf(view)); else if (b.dataset.spec) viewSpec(b.dataset.spec, halfOf(view)); else viewGen(+b.dataset.gen, halfOf(view), +b.dataset.end); return;
+    }
     const sel = window.getSelection(); if (sel && !sel.isCollapsed && view.contains(sel.anchorNode)) return;   /* selecting text to copy */
     edit(caretOffset(view, e.clientX, e.clientY));
   });
