@@ -157,6 +157,84 @@ function find(node, id){
   return null;
 }
 
+/* ---- disk cache: video pieces already downloaded are kept in this browser (IndexedDB), so re-watching after a
+   reload or in a new tab doesn't download them from MEGA again. Capped (about 1.5 GB, or half of what the browser
+   allows, whichever is less), oldest-used dropped first, and anything unused for 2 weeks is removed. MEGA file IDs
+   never change content (a replaced video gets a new ID), so a saved piece is always right. Any storage problem just
+   means pieces come from MEGA as before. */
+const DISK_CAP = self.RR_DISK_CAP || 1536 * BLOCK, DISK_DAYS = 14;
+let disk = null, diskP = null;
+const idbReq = q => new Promise((res, rej) => { q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); });
+function diskOpen(){
+  if (!diskP) diskP = (async () => {
+    try {
+      const db = await new Promise((res, rej) => { const r = indexedDB.open("rr-video", 1);
+        r.onupgradeneeded = () => { const d = r.result; if (!d.objectStoreNames.contains("b")) d.createObjectStore("b"); if (!d.objectStoreNames.contains("m")) d.createObjectStore("m"); };
+        r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); r.onblocked = () => rej(new Error("blocked")); });
+      const meta = new Map(), stale = [], cut = Date.now() - DISK_DAYS * 864e5; let total = 0;
+      await new Promise(res => { const tx = db.transaction("m"); tx.objectStore("m").openCursor().onsuccess = e => { const c = e.target.result; if (!c) return;
+        const v = c.value; if (v && v.at > cut && v.size > 0){ meta.set(c.key, v); total += v.size; } else stale.push(c.key); c.continue(); }; tx.oncomplete = res; tx.onerror = res; tx.onabort = res; });
+      let cap = DISK_CAP;
+      try { const est = await navigator.storage.estimate(); if (est && est.quota) cap = Math.min(cap, Math.floor(est.quota * 0.5)); } catch (_) {}
+      disk = { db, meta, total, cap, touched: new Set(), timer: 0 };
+      diskDelete(stale);
+      if (disk.total > disk.cap) diskEvict();
+    } catch (_) { disk = null; }
+    return disk;
+  })();
+  return diskP;
+}
+const diskHas = k => !!(disk && disk.meta.has(k));
+async function diskGet(k){
+  if (!diskHas(k)) return null;
+  try {
+    const v = await idbReq(disk.db.transaction("b").objectStore("b").get(k));
+    if (!v){ const m = disk.meta.get(k); if (m){ disk.meta.delete(k); disk.total -= m.size; } return null; }
+    const m = disk.meta.get(k); if (m){ m.at = Date.now(); disk.touched.add(k); if (!disk.timer) disk.timer = setTimeout(diskFlushTouched, 5000); }
+    return new Uint8Array(v);
+  } catch (_) { return null; }
+}
+function diskFlushTouched(){
+  if (!disk) return; disk.timer = 0;
+  const keys = [...disk.touched]; disk.touched.clear();
+  try { const tx = disk.db.transaction("m", "readwrite"), st = tx.objectStore("m"); keys.forEach(k => { const m = disk.meta.get(k); if (m) st.put(m, k); }); } catch (_) {}
+}
+function diskPut(k, bytes){
+  if (!disk || disk.meta.has(k) || !bytes || !bytes.byteLength) return;
+  const m = { at: Date.now(), size: bytes.byteLength };
+  disk.meta.set(k, m); disk.total += m.size;
+  try {
+    const tx = disk.db.transaction(["b", "m"], "readwrite");
+    tx.objectStore("b").put(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength), k);
+    tx.objectStore("m").put(m, k);
+    tx.onabort = tx.onerror = () => {                                      /* e.g. storage full: forget it and shrink the cap */
+      if (disk.meta.get(k) === m){ disk.meta.delete(k); disk.total -= m.size; }
+      disk.cap = Math.max(64 * BLOCK, Math.floor(disk.total * 0.8)); diskEvict();
+    };
+  } catch (_) { disk.meta.delete(k); disk.total -= m.size; return; }
+  if (disk.total > disk.cap) diskEvict();
+}
+function diskEvict(){
+  if (!disk) return;
+  const target = disk.cap * 0.85, gone = [];
+  for (const [k, m] of [...disk.meta.entries()].sort((a, b) => a[1].at - b[1].at)){ if (disk.total <= target) break; disk.meta.delete(k); disk.total -= m.size; gone.push(k); }
+  diskDelete(gone);
+}
+function diskDelete(keys){
+  if (!disk || !keys.length) return;
+  try { const tx = disk.db.transaction(["b", "m"], "readwrite"); keys.forEach(k => { tx.objectStore("b").delete(k); tx.objectStore("m").delete(k); }); } catch (_) {}
+}
+/* pieces being downloaded right now: a second request for the same piece waits for it instead of downloading it twice */
+const inflight = new Set();
+async function waitBlock(k, job){
+  for (let n = 0; n < 200 && !job.cancelled; n++){
+    const hit = cget(k); if (hit) return hit;
+    if (!inflight.has(k)) return null;
+    await sleep(75);
+  }
+  return null;
+}
+
 /* ---- block cache (least recently used dropped first) ---- */
 const cache = new Map(); let cacheBytes = 0;
 function cget(k){ const v = cache.get(k); if (v){ cache.delete(k); cache.set(k, v); } return v; }
@@ -199,6 +277,7 @@ async function serve(req, u){
     if (libErr || !self.mega) throw new Error("MEGA library didn't load: " + (libErr && libErr.message));
     const [root, key, id] = u.pathname.slice("/mega-stream/".length).split("/").map(decodeURIComponent);
     const file = await nodeFor(root, key, id);
+    await diskOpen();
     if (!file || file.directory) return new Response("Not found in the MEGA folder", { status: 404 });
     const size = file.size || 0;
     const m = /bytes=(\d*)-(\d*)/.exec(req.headers.get("range") || "");
@@ -221,15 +300,21 @@ async function serve(req, u){
         try {
           let i = b0;
           while (i <= b1 && !job.cancelled){
-            const hit = cget(ck(i));
+            let hit = cget(ck(i));
+            if (!hit && diskHas(ck(i))){ hit = await diskGet(ck(i)); if (hit) cput(ck(i), hit); }       /* saved earlier: no MEGA download */
+            if (!hit && inflight.has(ck(i))) hit = await waitBlock(ck(i), job);                        /* another request is fetching it */
             if (hit){ send(i, hit); i++; continue; }
-            let j = i; while (j + 1 <= b1 && !cache.has(ck(j + 1))) j++;          /* run of missing blocks */
+            if (job.cancelled) break;
+            let j = i; while (j + 1 <= b1 && !cache.has(ck(j + 1)) && !diskHas(ck(j + 1)) && !inflight.has(ck(j + 1))) j++;   /* run of missing blocks */
+            for (let b = i; b <= j; b++) inflight.add(ck(b));
             /* a dropped MEGA download is retried from the first block not yet sent, so the player never sees the hiccup */
             let next = i;
-            for (let attempt = 0; next <= j; attempt++){
-              try { await fetchRun(file, next, j, size, (bi, bytes) => { cput(ck(bi), bytes); send(bi, bytes); next = bi + 1; }, job); break; }
-              catch (e) { if (job.cancelled || attempt >= 2 || /bandwidth|quota|509|EOVERQUOTA/i.test(String(e && e.message))) throw e; await sleep(500 * (attempt + 1)); }
-            }
+            try {
+              for (let attempt = 0; next <= j; attempt++){
+                try { await fetchRun(file, next, j, size, (bi, bytes) => { cput(ck(bi), bytes); diskPut(ck(bi), bytes); inflight.delete(ck(bi)); send(bi, bytes); next = bi + 1; }, job); break; }
+                catch (e) { if (job.cancelled || attempt >= 2 || /bandwidth|quota|509|EOVERQUOTA/i.test(String(e && e.message))) throw e; await sleep(500 * (attempt + 1)); }
+              }
+            } finally { for (let b = i; b <= j; b++) inflight.delete(ck(b)); }
             i = j + 1;
           }
           if (!job.cancelled) c.close();

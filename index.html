@@ -1558,7 +1558,10 @@ async function megaLoad(opts = {}){
    moments. It works on one moment at a time, waits whenever a video is playing, stops if you switch
    tasks (and carries on when you come back), and only runs for streamed MEGA videos. */
 const WARM_SECONDS = 3, WARM_TIMEOUT = 10000;
-let warmV = null, warmJob = null;
+/* rubric moments are preloaded by two hidden videos working through one queue; anything you do with a visible
+   video (play, a timestamp click, scrubbing) cancels their downloads at once, and they retry once things are quiet */
+const WARM_LANES = 2;
+let warmVs = [], warmJob = null;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 function warmList(t){
   const seen = new Set(), list = [];
@@ -1571,37 +1574,55 @@ function warmList(t){
   }));
   return list.sort((a, b) => a.c.name.localeCompare(b.c.name, undefined, { numeric: true }) || a.sec - b.sec);
 }
+function warmEl(i){
+  if (!warmVs[i]){
+    const v = document.createElement("video"); v.muted = true; v.preload = "auto"; v.playsInline = true; v.setAttribute("aria-hidden", "true");
+    v.style.cssText = "position:fixed;left:-9999px;top:0;width:2px;height:2px;opacity:0;pointer-events:none"; document.body.appendChild(v); warmVs[i] = v;
+  }
+  return warmVs[i];
+}
+const isWarmEl = el => warmVs.includes(el);
+function warmAbort(){ warmVs.forEach(v => { if (v.getAttribute("src")){ v.__aborted = true; v.removeAttribute("src"); v.load(); if (v.__wake) v.__wake(); } }); }   /* drops their network requests now */
+["play", "seeking"].forEach(ev => document.addEventListener(ev, e => { if (e.target && e.target.tagName === "VIDEO" && !isWarmEl(e.target)) warmAbort(); }, true));
 function warmTask(t){
   if (warmJob && warmJob.t === t) return;
-  if (warmJob) warmJob.stop = true;
+  if (warmJob){ warmJob.stop = true; warmAbort(); }
   const job = warmJob = { t, stop: false };
   t.warmDone = t.warmDone || new Set();
-  (async () => {
-    if (!warmV){ warmV = document.createElement("video"); warmV.muted = true; warmV.preload = "auto"; warmV.playsInline = true; warmV.setAttribute("aria-hidden", "true");
-      warmV.style.cssText = "position:fixed;left:-9999px;top:0;width:2px;height:2px;opacity:0;pointer-events:none"; document.body.appendChild(warmV); }
-    const busy = () => cur !== t || [...players].some(p => p.playing());
-    const list = warmList(t);
-    for (let n = 0; n < list.length && !job.stop; ){
-      const it = list[n];
-      if (t.warmDone.has(it.k)){ n++; continue; }
-      /* wait while anything is playing or another task is open */
-      while (!job.stop && busy()) await sleep(500);
-      if (job.stop) break;
-      if (warmV.getAttribute("src") !== it.c.url){ warmV.src = it.c.url; await new Promise(res => { warmV.addEventListener("loadedmetadata", res, { once: true }); warmV.addEventListener("error", res, { once: true }); setTimeout(res, WARM_TIMEOUT); }); }
-      if (warmV.error || !(warmV.duration > 0)){ n++; continue; }
-      warmV.currentTime = Math.min(it.sec, warmV.duration);
-      const t0 = Date.now(); let interrupted = false;
-      while (!job.stop && Date.now() - t0 < WARM_TIMEOUT){
-        if (busy()){ interrupted = true; break; }
-        const b = warmV.buffered; let ok = false;
-        for (let i = 0; i < b.length; i++) if (b.start(i) <= it.sec + 0.05 && b.end(i) >= Math.min(warmV.duration, it.sec + WARM_SECONDS)) ok = true;
-        if (ok){ t.warmDone.add(it.k); break; }
-        await sleep(150);
+  const list = warmList(t).filter(it => !t.warmDone.has(it.k));
+  let next = 0;
+  const quiet = () => cur === t && ![...players].some(p => p.playing());
+  const lane = async i => {
+    const v = warmEl(i);
+    while (!job.stop){
+      const it = list[next++]; if (!it) break;
+      for (let tries = 0; tries < 20 && !job.stop; tries++){
+        while (!job.stop && !quiet()) await sleep(500);                  /* wait while anything plays or another task is open */
+        if (job.stop) break;
+        v.__aborted = false;
+        if (v.getAttribute("src") !== it.c.url){
+          v.src = it.c.url;
+          await new Promise(res => { v.__wake = res; v.addEventListener("loadedmetadata", res, { once: true }); v.addEventListener("error", res, { once: true }); setTimeout(res, WARM_TIMEOUT); });
+          v.__wake = null;
+        }
+        if (v.__aborted || job.stop) continue;                            /* canceled by you: try this moment again later */
+        if (v.error || !(v.duration > 0)) break;                          /* can't load: skip it */
+        v.currentTime = Math.min(it.sec, v.duration);
+        const t0 = Date.now(); let interrupted = false, ok = false;
+        while (!job.stop && Date.now() - t0 < WARM_TIMEOUT){
+          if (v.__aborted || !quiet()){ interrupted = true; break; }
+          const b = v.buffered;
+          for (let k = 0; k < b.length; k++) if (b.start(k) <= it.sec + 0.05 && b.end(k) >= Math.min(v.duration, it.sec + WARM_SECONDS)) ok = true;
+          if (ok){ t.warmDone.add(it.k); break; }
+          await sleep(150);
+        }
+        if (interrupted){ warmAbort(); continue; }
+        break;                                                            /* done (or timed out): next moment */
       }
-      if (!interrupted) n++;            /* interrupted by playback or a task switch: try this moment again */
     }
-    if (warmJob === job){ warmV.removeAttribute("src"); warmV.load(); warmJob = null; }
-  })();
+    if (v.getAttribute("src")){ v.removeAttribute("src"); v.load(); }
+  };
+  (async () => { await Promise.all(Array.from({ length: WARM_LANES }, (_, i) => lane(i))); if (warmJob === job) warmJob = null; })();
 }
 async function megaLoadInner(opts){
   const t = cur;
@@ -2064,7 +2085,7 @@ var liveBarRaf = 0;
 function queueLiveBars(){ if (!liveBarRaf) liveBarRaf = requestAnimationFrame(() => { liveBarRaf = 0; placeLiveBars(); }); }
 document.addEventListener("scroll", queueLiveBars, true);
 window.addEventListener("resize", queueLiveBars);
-["timeupdate", "seeked", "loadedmetadata", "emptied"].forEach(ev => document.addEventListener(ev, e => { if (e.target.tagName === "VIDEO" && e.target !== warmV) liveUpdate(); }, true));
+["timeupdate", "seeked", "loadedmetadata", "emptied"].forEach(ev => document.addEventListener(ev, e => { if (e.target.tagName === "VIDEO" && !isWarmEl(e.target)) liveUpdate(); }, true));
 
 /* ---------- fit the boxes to the screen (every tab but Rubric): each box ends at the bottom of the window and
    scrolls inside itself, so the page doesn't scroll. Only a box made taller by hand (the video edge, a notes
