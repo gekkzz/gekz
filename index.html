@@ -1336,19 +1336,75 @@ function parseMegaLink(url){
   const m = /^https?:\/\/(?:www\.)?mega\.(?:nz|co\.nz)\/folder\/([^#\/?]+)#([^\/?]+)(?:\/(folder|file)\/([^\/?#\s]+))?/.exec((url || "").trim());
   return m ? { root: m[1], key: m[2], type: m[3] || "folder", node: m[4] || null } : null;
 }
-/* MEGA can answer a shared-folder listing from a saved snapshot when the request allows it ("ca": 1, which the
-   megajs library always sends). MEGA's own site then catches up on later changes; megajs doesn't, so newly added or
-   replaced files stay invisible. Asking without that flag gets the folder as it is now. */
+/* ---- MEGA catch-up ----
+   A shared folder's listing can come back as a saved snapshot. MEGA's own site then asks for every change made
+   since (the "sc" feed, starting from the snapshot's sequence number "sn"); megajs doesn't, so files added or
+   replaced after the snapshot stay invisible. megaLoadLive() reads the listing, asks for the changes since, applies
+   additions, deletions and updates to the raw list, and lets megajs itself decode the result (no crypto here).
+   Any failure along the way just keeps the plain listing. */
+const MEGA_RAW = {};
 function megaLive(f){
   const api = f && f.api;
   if (!api || api.__live || typeof api.request !== "function") return f;
   const orig = api.request.bind(api);
-  api.request = (req, ...rest) => {
-    if (req && req.a === "f" && "ca" in req){ req = Object.assign({}, req); delete req.ca; }
-    return orig(req, ...rest);
+  api.request = (req, cb, ...rest) => {
+    if (req && req.a === "f"){
+      if ("ca" in req){ req = Object.assign({}, req); delete req.ca; }
+      const n = req._querystring && req._querystring.n;
+      if (n && typeof cb === "function"){ const cb0 = cb; cb = (err, resp, ...more) => { if (!err && resp && Array.isArray(resp.f)) MEGA_RAW[n] = resp; return cb0(err, resp, ...more); }; }
+    }
+    return orig(req, cb, ...rest);
   };
   api.__live = true;
   return f;
+}
+async function megaLoadLive(makeFile, rootHandle){
+  const f = megaLive(makeFile());
+  await f.loadAttributes();
+  f.__caughtUp = 0;
+  const raw = MEGA_RAW[rootHandle];
+  if (!raw || !raw.sn) return f;
+  try {
+    let nodes = raw.f.slice(), sn = raw.sn, changes = 0;
+    const gw = (f.api && f.api.gateway) || "https://g.api.mega.co.nz/";
+    for (let round = 0; round < 25; round++){
+      const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 10000);
+      let j;
+      try { j = await (await fetch(gw + "sc?" + new URLSearchParams({ sn, ssl: 1, n: rootHandle }), { method: "POST", signal: ctl.signal })).json(); }
+      finally { clearTimeout(timer); }
+      if (Array.isArray(j)) j = j[0];
+      if (!j || typeof j !== "object") break;                 /* an error code: keep what we have */
+      const acts = Array.isArray(j.a) ? j.a : [];
+      for (const p of acts){
+        if (!p || typeof p !== "object") continue;
+        if (p.a === "t" && p.t && Array.isArray(p.t.f)){
+          for (const n of p.t.f){ if (n && n.h){ nodes = nodes.filter(x => x.h !== n.h); nodes.push(n); changes++; } }
+        } else if (p.a === "d" && p.n){
+          const gone = new Set([p.n]);
+          for (let grew = true; grew; ){ grew = false; for (const x of nodes) if (!gone.has(x.h) && gone.has(x.p)){ gone.add(x.h); grew = true; } }
+          const before = nodes.length; nodes = nodes.filter(x => !gone.has(x.h)); if (nodes.length !== before) changes++;
+        } else if (p.a === "u" && p.n){
+          const i = nodes.findIndex(x => x.h === p.n);
+          if (i >= 0){ const x = Object.assign({}, nodes[i]); if (p.at) x.a = p.at; if (p.k) x.k = p.k; if (p.ts) x.ts = p.ts; nodes[i] = x; changes++; }
+        }
+      }
+      if (j.sn) sn = j.sn;
+      if (j.w || !acts.length || !j.sn) break;                 /* "w" = caught up */
+    }
+    if (!changes) return f;
+    /* rebuild: the same listing request, answered with the caught-up list, decoded by megajs as usual */
+    const merged = Object.assign({}, raw, { f: nodes, sn });
+    const g = makeFile(), realApi = g.api;
+    g.api = Object.create(realApi);
+    g.api.request = (req, cb, ...rest) => (req && req.a === "f" && typeof cb === "function") ? cb(null, merged) : realApi.request(req, cb, ...rest);
+    await g.loadAttributes();
+    g.api = realApi;
+    g.__caughtUp = changes;
+    MEGA_RAW[rootHandle] = merged;
+    return g;
+  } catch (e) {
+    return f;
+  }
 }
 /* the shared folder's listing is kept for speed; it is read again when the sheet links to something the kept
    listing doesn't have (files added to the folder since), and dropped whenever a new CSV is loaded */
@@ -1359,8 +1415,7 @@ async function megaRoot(link, fresh = false){
   if (!megaRoots[k]){
     megaRootAt[k] = Date.now();
     const lib = await megaLib();
-    const f = megaLive(lib.File.fromURL("https://mega.nz/folder/" + link.root + "#" + link.key));
-    megaRoots[k] = f.loadAttributes().then(() => f).catch(e => { delete megaRoots[k]; throw e; });
+    megaRoots[k] = megaLoadLive(() => lib.File.fromURL("https://mega.nz/folder/" + link.root + "#" + link.key), link.root).catch(e => { delete megaRoots[k]; throw e; });
   }
   return megaRoots[k];
 }
@@ -1396,12 +1451,6 @@ async function megaNode(url, hint = null){
   let root = await megaRoot(link);
   let node = link.node ? megaFind(root, link.node) : root;
   if (!node && link.node){ root = await megaRoot(link, true); node = megaFind(root, link.node); }   /* re-read the folder once */
-  if (!node && link.node){
-    /* fallback: ask MEGA for that item directly, using the library's own lookup */
-    const lib = await megaLib();
-    try { node = await megaLive(lib.File.fromURL("https://mega.nz/folder/" + link.root + "#" + link.key + "/file/" + link.node)).loadAttributes(); }
-    catch (e) { node = null; }
-  }
   if (!node && link.node && hint){
     const found = megaByLayout(root, hint);
     if (found){ node = found.node; if (hint.used) hint.used.push(found.path); }
@@ -1410,7 +1459,7 @@ async function megaNode(url, hint = null){
     /* say what the shared link actually shows, so it's clear whether recent uploads are visible through it at all */
     const newest = newestNode(root), when = newest && newest.timestamp ? new Date(newest.timestamp * 1000).toLocaleString([], { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }) : "";
     const col = hint ? ({ src: "source clips", gold: "golden edit", gen: "generated video" })[hint.k] + " " : "";
-    throw new Error("[v4] Couldn't find the " + col + "item " + link.node + " in the shared MEGA folder " + (root.name ? "\u201c" + root.name + "\u201d (" + link.root + ")" : link.root) + " (" + countNodes(root) + " items, read just now"
+    throw new Error("[v5] Couldn't find the " + col + "item " + link.node + " in the shared MEGA folder " + (root.name ? "\u201c" + root.name + "\u201d (" + link.root + ")" : link.root) + " (" + countNodes(root) + " items, read just now" + (root.__caughtUp ? " including " + root.__caughtUp + " later changes" : ", no later changes reported")
       + (newest ? "; newest item visible through this link: \u201c" + (newest.name || "unnamed") + "\u201d" + (when ? ", added " + when : "") : "") + "). "
       + (hint && hint.why ? "Also looked for it by folder layout, but " + hint.why + ". " : "")
       + "If your new videos were added after that, they aren't reachable through this link: they may be in a different shared folder, or in a subfolder that has its own separate share link. "
