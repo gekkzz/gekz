@@ -1370,10 +1370,18 @@ async function megaNode(url){
     try { node = await lib.File.fromURL("https://mega.nz/folder/" + link.root + "#" + link.key + "/file/" + link.node).loadAttributes(); }
     catch (e) { node = null; }
   }
-  if (!node) throw new Error("Couldn't find item " + link.node + " inside the shared MEGA folder (" + countNodes(root) + " items found). The link may point to something that was moved or deleted.");
+  if (!node){
+    /* say what the shared link actually shows, so it's clear whether recent uploads are visible through it at all */
+    const newest = newestNode(root), when = newest && newest.timestamp ? new Date(newest.timestamp * 1000).toLocaleString([], { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }) : "";
+    throw new Error("Couldn't find item " + link.node + " in the shared MEGA folder " + link.root + " (" + countNodes(root) + " items, read just now"
+      + (newest ? "; newest item visible through this link: \u201c" + (newest.name || "unnamed") + "\u201d" + (when ? ", added " + when : "") : "") + "). "
+      + "If your new videos were added after that, they aren't reachable through this link: they may be in a different shared folder, or in a subfolder that has its own separate share link. "
+      + "Open the link from the sheet in MEGA to check, or share the new videos' parent folder and use links from that share.");
+  }
   return node;
 }
 const countNodes = n => 1 + (n.children || []).reduce((s, c) => s + countNodes(c), 0);
+const newestNode = n => { let best = null; const walk = x => { if (!x.directory && x.timestamp && (!best || x.timestamp > best.timestamp)) best = x; (x.children || []).forEach(walk); }; walk(n); return best; };
 const mb = n => (n / 1048576).toFixed(n < 10485760 ? 1 : 0) + " MB";
 const vidType = name => /\.webm$/i.test(name) ? "video/webm" : "video/mp4";   /* Chrome sniffs .mov (QuickTime) content itself */
 
