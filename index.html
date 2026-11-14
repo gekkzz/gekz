@@ -609,8 +609,10 @@ function load(text, name){
   $("file").textContent = $("file").title = name; $("dl").title = "Download the edited copy of " + name;
   fillTaskSel();
   note("");
-  selectTask(first);
-  saveKey = SAVE_PREFIX + hashText(text); $("saveInd").textContent = ""; $("saveInd").classList.remove("err");
+  sheetHash = hashText(text);
+  const lastId = lastTaskGet(sheetHash), last = lastId && tasks.find(t => t.id === lastId);
+  selectTask(last || first);                                  /* reopen on the task you were on with this sheet */
+  saveKey = SAVE_PREFIX + sheetHash; $("saveInd").textContent = ""; $("saveInd").classList.remove("err");
   offerRestore();
 }
 
@@ -662,6 +664,7 @@ function selectTask(t){
     $("rheadTask").textContent = cur.id;
   }
   updNav(); draw(); updUndo(); setMegaBtn();
+  if (cur && sheetHash) lastTaskSet(sheetHash, cur.id);
   if (cur && cur.mega === "ready") warmTask(cur);
   Object.values(slots).forEach(el => { if (el !== slots.rubric) el.scrollTop = 0; });
   if (curTab === "rubric") window.scrollTo(0, 0);
@@ -1034,7 +1037,8 @@ function makePlayer(host, url, name, copyPrefix = ""){
   v.addEventListener("loadedmetadata", () => {
     autoVidH();
     seek.max = v.duration; dur.textContent = "/ " + fmt(v.duration); upd();
-    if (!v.videoWidth){ err.hidden = false; err.textContent = "No picture: " + name + " uses a video format this browser can't display (often ProRes from editing software, or HEVC). Audio and timestamps still work. Convert it to MP4 (H.264) to see the video."; }
+    if (!v.videoWidth){ err.hidden = false; err.textContent = "No picture: " + name + " uses a video format this browser can't display (often ProRes from editing software, or HEVC). Audio and timestamps still work. Convert it to MP4 (H.264) to see the video.";
+      probeFormat(url).then(f => { const a = formatAdvice(name, f); if (a && !v.videoWidth) err.textContent = "No picture: " + a; }); }
   });
   v.addEventListener("seeked", upd);
   v.addEventListener("timeupdate", () => { if (v.paused) upd(); });
@@ -1063,6 +1067,7 @@ function makePlayer(host, url, name, copyPrefix = ""){
   const showErr = async () => {
     err.hidden = false;
     err.textContent = "This browser can't play " + name + ". It may use a format like ProRes or HEVC. Convert it to MP4 (H.264) or WebM.";
+    if (!everLoaded) probeFormat(url).then(f => { const a = formatAdvice(name, f); if (a && !everLoaded && !err.querySelector("button")) err.textContent = "Can't play: " + a; });
     let why = "";
     if (isMega){ try { const r = await fetch(url, { headers: { Range: "bytes=0-0" } }); if (!r.ok) why = "Couldn't stream " + name + " from MEGA: " + (await r.text()).slice(0, 200); } catch (e) { why = "Couldn't reach MEGA: " + String(e.message || e); } }
     if (!why && everLoaded) why = name + " stopped playing.";
@@ -1169,7 +1174,9 @@ function addClip(blob, name, t){
   if (old >= 0){ const c = v.clips[old]; c.player.destroy(); c.host.remove(); if (c.url.startsWith("blob:")) URL.revokeObjectURL(c.url); v.clips.splice(old, 1); }
   const url = typeof blob === "string" ? blob : URL.createObjectURL(blob), host = document.createElement("div");
   host.hidden = true; $("clipStage").appendChild(host);
-  v.clips.push({ name, url, host, player: makePlayer(host, url, name, clipLabel(stem(name))) });
+  const player = makePlayer(host, url, name, clipLabel(stem(name)));
+  v.clips.push({ name, url, host, player });
+  vposTrack(player, host, t, "clip:" + name);
   v.clips.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" }));
   if (!v.active || !v.clips.includes(v.active)) v.active = v.clips[0] || null;
   if (t === (cur || NOTASK)) renderClips(); else v.clips.forEach(c => { c.host.hidden = true; });
@@ -1181,6 +1188,7 @@ function setSingle(k, blob, name, t){
   host.className = "vhost"; host.innerHTML = '<div class="vname"></div><div></div>'; host.firstChild.textContent = name;
   $(STAGE[k]).appendChild(host);
   v[k] = { name, url, host, player: makePlayer(host.lastChild, url, name) };
+  vposTrack(v[k].player, host, t, k + ":" + name);
   const mine = t === (cur || NOTASK);
   host.hidden = !mine; if (mine) $(EMPTY[k]).hidden = true;
   if (mine) placeVids();
@@ -1336,13 +1344,14 @@ function parseMegaLink(url){
   const m = /^https?:\/\/(?:www\.)?mega\.(?:nz|co\.nz)\/folder\/([^#\/?]+)#([^\/?]+)(?:\/(folder|file)\/([^\/?#\s]+))?/.exec((url || "").trim());
   return m ? { root: m[1], key: m[2], type: m[3] || "folder", node: m[4] || null } : null;
 }
-/* ---- MEGA catch-up ----
+/* ---- MEGA catch-up + saved copy ----
    A shared folder's listing can come back as a saved snapshot. MEGA's own site then asks for every change made
    since (the "sc" feed, starting from the snapshot's sequence number "sn"); megajs doesn't, so files added or
-   replaced after the snapshot stay invisible. megaLoadLive() reads the listing, asks for the changes since, applies
-   additions, deletions and updates to the raw list, and lets megajs itself decode the result (no crypto here).
-   Any failure along the way just keeps the plain listing. */
-const MEGA_RAW = {};
+   replaced after the snapshot stay invisible. megaLoadLive() gets the listing, catches up on the changes, and lets
+   megajs itself decode the result (no crypto here). The caught-up listing (still encrypted, as MEGA sent it) is
+   also kept in this browser (IndexedDB), so the next visit only fetches what changed since.
+   Any failure along the way falls back to a plain fresh listing. */
+const MEGA_RAW = {}, MEGA_CACHE_DAYS = 14;
 function megaLive(f){
   const api = f && f.api;
   if (!api || api.__live || typeof api.request !== "function") return f;
@@ -1358,53 +1367,87 @@ function megaLive(f){
   api.__live = true;
   return f;
 }
-async function megaLoadLive(makeFile, rootHandle){
+/* tiny key-value store in IndexedDB; every call quietly does nothing if storage isn't available */
+function kvOpen(){ return new Promise((res, rej) => { if (!self.indexedDB) return rej(new Error("no IndexedDB")); const r = indexedDB.open("rr-cache", 1);
+  r.onupgradeneeded = () => { if (!r.result.objectStoreNames.contains("kv")) r.result.createObjectStore("kv"); };
+  r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); r.onblocked = () => rej(new Error("blocked")); }); }
+async function kvDo(mode, fn){ try { const db = await kvOpen(); return await new Promise(res => { const tx = db.transaction("kv", mode), st = tx.objectStore("kv"); let out; const q = fn(st); if (q) q.onsuccess = () => { out = q.result; };
+  tx.oncomplete = () => { db.close(); res(out); }; tx.onerror = tx.onabort = () => { db.close(); res(undefined); }; }); } catch (_) { return undefined; } }
+const kvGet = k => kvDo("readonly", st => st.get(k));
+const kvSet = (k, v) => kvDo("readwrite", st => { st.put(v, k); });
+const kvDel = k => kvDo("readwrite", st => { st.delete(k); });
+async function megaCatchUp(gw, rootHandle, nodes, sn){
+  let ok = false, changes = 0;
+  nodes = nodes.slice();
+  for (let round = 0; round < 25; round++){
+    const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 10000);
+    let j;
+    try { j = await (await fetch(gw + "sc?" + new URLSearchParams({ sn, ssl: 1, n: rootHandle }), { method: "POST", signal: ctl.signal })).json(); }
+    catch (_) { break; }
+    finally { clearTimeout(timer); }
+    if (Array.isArray(j)) j = j[0];
+    if (!j || typeof j !== "object") break;                   /* an error code (e.g. the snapshot is too old) */
+    ok = true;
+    const acts = Array.isArray(j.a) ? j.a : [];
+    for (const p of acts){
+      if (!p || typeof p !== "object") continue;
+      if (p.a === "t" && p.t && Array.isArray(p.t.f)){
+        for (const n of p.t.f){ if (n && n.h){ nodes = nodes.filter(x => x.h !== n.h); nodes.push(n); changes++; } }
+      } else if (p.a === "d" && p.n){
+        const gone = new Set([p.n]);
+        for (let grew = true; grew; ){ grew = false; for (const x of nodes) if (!gone.has(x.h) && gone.has(x.p)){ gone.add(x.h); grew = true; } }
+        const before = nodes.length; nodes = nodes.filter(x => !gone.has(x.h)); if (nodes.length !== before) changes++;
+      } else if (p.a === "u" && p.n){
+        const i = nodes.findIndex(x => x.h === p.n);
+        if (i >= 0){ const x = Object.assign({}, nodes[i]); if (p.at) x.a = p.at; if (p.k) x.k = p.k; if (p.ts) x.ts = p.ts; nodes[i] = x; changes++; }
+      }
+    }
+    if (j.sn) sn = j.sn;
+    if (j.w || !acts.length || !j.sn) break;                   /* "w" = caught up */
+  }
+  return { ok, nodes, sn, changes };
+}
+/* decode a listing with megajs: the same listing request, answered with the given (still encrypted) list */
+async function megaBuild(makeFile, resp){
+  const g = makeFile(), realApi = g.api;
+  g.api = Object.create(realApi);
+  g.api.request = (req, cb, ...rest) => (req && req.a === "f" && typeof cb === "function") ? cb(null, resp) : realApi.request(req, cb, ...rest);
+  try { await g.loadAttributes(); } finally { g.api = realApi; }
+  return g;
+}
+async function megaLoadLive(makeFile, rootHandle, fresh = false){
+  const ck = "mega:" + rootHandle;
+  const gwOf = f => (f && f.api && f.api.gateway) || "https://g.api.mega.co.nz/";
+  if (!fresh){
+    const c = await kvGet(ck);
+    if (c && Array.isArray(c.f) && c.sn && Date.now() - (c.at || 0) < MEGA_CACHE_DAYS * 864e5){
+      try {
+        const r = await megaCatchUp(gwOf(megaLive(makeFile())), rootHandle, c.f, c.sn);
+        if (r.ok){
+          const merged = { f: r.nodes, sn: r.sn }, g = await megaBuild(makeFile, merged);
+          g.__caughtUp = r.changes; g.__fromCache = true;
+          MEGA_RAW[rootHandle] = merged; kvSet(ck, { f: r.nodes, sn: r.sn, at: Date.now() });
+          return g;
+        }
+      } catch (_) {}
+      kvDel(ck);                                                  /* unusable: start over with a fresh listing */
+    }
+  }
   const f = megaLive(makeFile());
   await f.loadAttributes();
   f.__caughtUp = 0;
   const raw = MEGA_RAW[rootHandle];
   if (!raw || !raw.sn) return f;
   try {
-    let nodes = raw.f.slice(), sn = raw.sn, changes = 0;
-    const gw = (f.api && f.api.gateway) || "https://g.api.mega.co.nz/";
-    for (let round = 0; round < 25; round++){
-      const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 10000);
-      let j;
-      try { j = await (await fetch(gw + "sc?" + new URLSearchParams({ sn, ssl: 1, n: rootHandle }), { method: "POST", signal: ctl.signal })).json(); }
-      finally { clearTimeout(timer); }
-      if (Array.isArray(j)) j = j[0];
-      if (!j || typeof j !== "object") break;                 /* an error code: keep what we have */
-      const acts = Array.isArray(j.a) ? j.a : [];
-      for (const p of acts){
-        if (!p || typeof p !== "object") continue;
-        if (p.a === "t" && p.t && Array.isArray(p.t.f)){
-          for (const n of p.t.f){ if (n && n.h){ nodes = nodes.filter(x => x.h !== n.h); nodes.push(n); changes++; } }
-        } else if (p.a === "d" && p.n){
-          const gone = new Set([p.n]);
-          for (let grew = true; grew; ){ grew = false; for (const x of nodes) if (!gone.has(x.h) && gone.has(x.p)){ gone.add(x.h); grew = true; } }
-          const before = nodes.length; nodes = nodes.filter(x => !gone.has(x.h)); if (nodes.length !== before) changes++;
-        } else if (p.a === "u" && p.n){
-          const i = nodes.findIndex(x => x.h === p.n);
-          if (i >= 0){ const x = Object.assign({}, nodes[i]); if (p.at) x.a = p.at; if (p.k) x.k = p.k; if (p.ts) x.ts = p.ts; nodes[i] = x; changes++; }
-        }
-      }
-      if (j.sn) sn = j.sn;
-      if (j.w || !acts.length || !j.sn) break;                 /* "w" = caught up */
+    const r = await megaCatchUp(gwOf(f), rootHandle, raw.f, raw.sn);
+    if (r.changes){
+      const merged = { f: r.nodes, sn: r.sn }, g = await megaBuild(makeFile, merged);
+      g.__caughtUp = r.changes; MEGA_RAW[rootHandle] = merged; kvSet(ck, { f: r.nodes, sn: r.sn, at: Date.now() });
+      return g;
     }
-    if (!changes) return f;
-    /* rebuild: the same listing request, answered with the caught-up list, decoded by megajs as usual */
-    const merged = Object.assign({}, raw, { f: nodes, sn });
-    const g = makeFile(), realApi = g.api;
-    g.api = Object.create(realApi);
-    g.api.request = (req, cb, ...rest) => (req && req.a === "f" && typeof cb === "function") ? cb(null, merged) : realApi.request(req, cb, ...rest);
-    await g.loadAttributes();
-    g.api = realApi;
-    g.__caughtUp = changes;
-    MEGA_RAW[rootHandle] = merged;
-    return g;
-  } catch (e) {
+    kvSet(ck, { f: raw.f, sn: r.ok ? r.sn : raw.sn, at: Date.now() });
     return f;
-  }
+  } catch (_) { return f; }
 }
 /* the shared folder's listing is kept for speed; it is read again when the sheet links to something the kept
    listing doesn't have (files added to the folder since), and dropped whenever a new CSV is loaded */
@@ -1415,7 +1458,7 @@ async function megaRoot(link, fresh = false){
   if (!megaRoots[k]){
     megaRootAt[k] = Date.now();
     const lib = await megaLib();
-    megaRoots[k] = megaLoadLive(() => lib.File.fromURL("https://mega.nz/folder/" + link.root + "#" + link.key), link.root).catch(e => { delete megaRoots[k]; throw e; });
+    megaRoots[k] = megaLoadLive(() => lib.File.fromURL("https://mega.nz/folder/" + link.root + "#" + link.key), link.root, fresh).catch(e => { delete megaRoots[k]; throw e; });
   }
   return megaRoots[k];
 }
@@ -1459,7 +1502,7 @@ async function megaNode(url, hint = null){
     /* say what the shared link actually shows, so it's clear whether recent uploads are visible through it at all */
     const newest = newestNode(root), when = newest && newest.timestamp ? new Date(newest.timestamp * 1000).toLocaleString([], { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }) : "";
     const col = hint ? ({ src: "source clips", gold: "golden edit", gen: "generated video" })[hint.k] + " " : "";
-    throw new Error("[v5] Couldn't find the " + col + "item " + link.node + " in the shared MEGA folder " + (root.name ? "\u201c" + root.name + "\u201d (" + link.root + ")" : link.root) + " (" + countNodes(root) + " items, read just now" + (root.__caughtUp ? " including " + root.__caughtUp + " later changes" : ", no later changes reported")
+    throw new Error("[v6] Couldn't find the " + col + "item " + link.node + " in the shared MEGA folder " + (root.name ? "\u201c" + root.name + "\u201d (" + link.root + ")" : link.root) + " (" + countNodes(root) + " items, " + (root.__fromCache ? "from this browser's saved copy" : "read just now") + (root.__caughtUp ? " including " + root.__caughtUp + " later changes" : ", no later changes reported")
       + (newest ? "; newest item visible through this link: \u201c" + (newest.name || "unnamed") + "\u201d" + (when ? ", added " + when : "") : "") + "). "
       + (hint && hint.why ? "Also looked for it by folder layout, but " + hint.why + ". " : "")
       + "If your new videos were added after that, they aren't reachable through this link: they may be in a different shared folder, or in a subfolder that has its own separate share link. "
@@ -1977,7 +2020,9 @@ $("restoreYes").addEventListener("click", () => { const d = $("restoreDlg"); d.c
 $("restoreNo").addEventListener("click", () => { const d = $("restoreDlg"); d.close(); lsDel(d._key); });
 $("restoreDlg").addEventListener("cancel", e => e.preventDefault());   /* Esc doesn't silently pick one */
 pruneSaves();
-showTab("sbs");      /* the app opens on Side by Side */
+(async () => { try { const db = await kvOpen(); const tx = db.transaction("kv", "readwrite"), st = tx.objectStore("kv"), cut = Date.now() - MEGA_CACHE_DAYS * 864e5;
+  st.openCursor().onsuccess = e => { const c = e.target.result; if (!c) return; if (!c.value || !(c.value.at > cut)) c.delete(); c.continue(); }; tx.oncomplete = () => db.close(); } catch (_) {} })();   /* drop saved MEGA listings not used for 2 weeks */
+{ let t0 = "sbs"; try { const t = localStorage.getItem("rr-tab"); if (t && panes[t] && document.querySelector('.tab[data-tab="' + t + '"]')) t0 = t; } catch (_) {} showTab(t0); }   /* the tab you were on; the very first visit opens on Side by Side */
 
 /* ---------- live highlights: while a source clip plays, rubric rows whose timestamps cover that moment light up;
    while the generated video plays, matching "out" moments in Went Well / Went Wrong light up ---------- */
@@ -2187,6 +2232,93 @@ function setBFS(n){
 }
 setBFS(bfs);
 applyFilter();
+
+/* ---------- reopen where you left off: the last task per sheet (layout, filter and sizes are already remembered) ---------- */
+let sheetHash = null;
+const LAST_KEY = "rr-last", KEEP_MS = 14 * 864e5;
+function lastAll(){ try { return JSON.parse(localStorage.getItem(LAST_KEY) || "{}") || {}; } catch (_) { return {}; } }
+function lastTaskGet(h){ const e = lastAll()[h]; return e && e.task; }
+function lastTaskSet(h, id){
+  try { const all = lastAll(), cut = Date.now() - KEEP_MS; Object.keys(all).forEach(k => { if (!all[k] || all[k].at < cut) delete all[k]; });
+    all[h] = { task: id, at: Date.now() }; localStorage.setItem(LAST_KEY, JSON.stringify(all)); } catch (_) {}
+}
+/* the main tab you were on (the very first visit still opens on Side by Side) */
+const TAB_KEY = "rr-tab";
+document.querySelectorAll(".tab").forEach(b => b.addEventListener("click", () => { try { localStorage.setItem(TAB_KEY, b.dataset.tab); } catch (_) {} }));
+
+/* ---------- video positions: each video returns to where you left it, per sheet and task, after a reload ---------- */
+const VPOS_KEY = "rr-vpos";
+let vposCache = null, vposTimer = 0;
+function vposAll(){ if (!vposCache){ try { vposCache = JSON.parse(localStorage.getItem(VPOS_KEY) || "{}") || {}; } catch (_) { vposCache = {}; } } return vposCache; }
+function vposFlush(){
+  clearTimeout(vposTimer); vposTimer = 0;
+  try { const all = vposAll(), cut = Date.now() - KEEP_MS; Object.keys(all).forEach(h => { if (!all[h] || all[h].at < cut) delete all[h]; }); localStorage.setItem(VPOS_KEY, JSON.stringify(all)); } catch (_) {}
+}
+function vposSave(t, key, sec){
+  if (!sheetHash || !t || !t.id || !isFinite(sec)) return;
+  const all = vposAll(), s = all[sheetHash] || (all[sheetHash] = { at: 0, t: {} });
+  s.at = Date.now(); (s.t[t.id] || (s.t[t.id] = {}))[key] = Math.round(sec * 100) / 100;
+  clearTimeout(vposTimer); vposTimer = setTimeout(vposFlush, 1000);
+}
+function vposGet(t, key){ const s = sheetHash && t && t.id && vposAll()[sheetHash]; return s && s.t && s.t[t.id] ? s.t[t.id][key] : undefined; }
+function vposTrack(player, host, t, key){
+  const v = host.querySelector("video"); if (!v || !t || !t.id) return;
+  let last = 0;
+  const save = () => { if (v.readyState >= 1 && !v.error) vposSave(t, key, v.currentTime); };
+  v.addEventListener("pause", save); v.addEventListener("seeked", save);
+  v.addEventListener("timeupdate", () => { const n = Date.now(); if (n - last > 2000){ last = n; save(); } });
+  const saved = vposGet(t, key);
+  if (saved > 0.05){
+    const go = () => { if (v.currentTime < 0.05 && saved < (isFinite(v.duration) ? v.duration - 0.1 : Infinity)) player.seekTo(saved); };
+    if (v.readyState >= 1) go(); else v.addEventListener("loadedmetadata", go, { once: true });   /* a timestamp click that follows still wins */
+  }
+}
+window.addEventListener("beforeunload", vposFlush);
+
+/* ---------- name the video format when a clip won't show (reads the file's first bytes / its index) ---------- */
+const PRORES = { apco: "ProRes 422 Proxy", apcs: "ProRes 422 LT", apcn: "ProRes 422", apch: "ProRes 422 HQ", ap4h: "ProRes 4444", ap4x: "ProRes 4444 XQ" };
+const VID4CC = new Set(Object.keys(PRORES).concat(["hvc1", "hev1", "dvh1", "dvhe", "avc1", "avc3", "av01", "vp09", "vp08", "mp4v", "jpeg", "mjpa", "mjpb", "dvc ", "dvcp", "dv5p", "dv5n", "v210", "raw ", "png ", "2vuy", "s263", "h263"]));
+async function fileReader(url){
+  if (url.startsWith("blob:")){ const b = await (await fetch(url)).blob(); return { size: b.size, read: async (s, e) => new Uint8Array(await b.slice(s, e).arrayBuffer()) }; }
+  const r = await fetch(url, { headers: { Range: "bytes=0-65535" } });
+  const total = +((/\/(\d+)\s*$/.exec(r.headers.get("content-range") || "") || [])[1] || 0);
+  await r.arrayBuffer();
+  return { size: total, read: async (s, e) => new Uint8Array(await (await fetch(url, { headers: { Range: "bytes=" + s + "-" + (e - 1) } })).arrayBuffer()) };
+}
+async function probeFormat(url){
+  try {
+    const rd = await fileReader(url), u32 = (b, i) => ((b[i] << 24) | (b[i + 1] << 16) | (b[i + 2] << 8) | b[i + 3]) >>> 0, str = (b, i) => String.fromCharCode(b[i], b[i + 1], b[i + 2], b[i + 3]);
+    let pos = 0, moov = null;
+    for (let n = 0; n < 32 && (!rd.size || pos < rd.size); n++){                   /* walk the top-level boxes to find the index (moov) */
+      const h = await rd.read(pos, pos + 16); if (h.length < 8) break;
+      let size = u32(h, 0); const type = str(h, 4);
+      if (size === 1) size = u32(h, 8) * 4294967296 + u32(h, 12); else if (size === 0) size = (rd.size || pos + 8) - pos;
+      if (size < 8) break;
+      if (type === "moov"){ moov = await rd.read(pos, pos + Math.min(size, 16 * 1048576)); break; }
+      pos += size;
+    }
+    if (!moov) return null;
+    const found = [];
+    for (let i = 4; i + 24 < moov.length; i++){
+      if (moov[i] === 0x73 && str(moov, i) === "stsd"){                           /* sample description: codec of each track */
+        const cc = str(moov, i + 16);
+        if (/^[\x20-\x7e]{4}$/.test(cc)){ let prof = 0; if (cc === "avc1" || cc === "avc3"){ for (let j = i + 20; j + 6 < Math.min(moov.length, i + 400); j++) if (str(moov, j) === "avcC"){ prof = moov[j + 5]; break; } } found.push({ cc, prof }); }
+      }
+    }
+    return found.find(x => VID4CC.has(x.cc)) || null;
+  } catch (_) { return null; }
+}
+function formatAdvice(name, f){
+  if (!f) return null;
+  const cc = f.cc;
+  if (PRORES[cc]) return name + " is " + PRORES[cc] + ", an editing format no web browser can show. Audio and timestamps still work. Convert it to MP4 (H.264) to see the picture.";
+  if (/^(hvc1|hev1|dvh1|dvhe)$/.test(cc)) return name + " is HEVC (H.265)" + (/^dvh/.test(cc) ? " with Dolby Vision" : "") + ". Chrome shows HEVC only when this computer's graphics hardware can decode it: open chrome://gpu and look for HEVC under Video Acceleration, and update Chrome and the graphics driver. Otherwise convert it to MP4 (H.264).";
+  if ((cc === "avc1" || cc === "avc3") && [110, 122, 244].includes(f.prof)) return name + " is H.264 " + ({ 110: "High 10 (10-bit)", 122: "High 4:2:2", 244: "High 4:4:4" })[f.prof] + ", which browsers can't decode. Export it as standard 8-bit H.264 (4:2:0) MP4.";
+  if (/^(jpeg|mjpa|mjpb)$/.test(cc)) return name + " is Motion JPEG, which browsers can't play. Convert it to MP4 (H.264).";
+  if (/^(dvc |dvcp|dv5p|dv5n)$/.test(cc)) return name + " is DV video, which browsers can't play. Convert it to MP4 (H.264).";
+  if (/^(v210|raw |2vuy|png )$/.test(cc)) return name + " is uncompressed or image-sequence video, which browsers can't play. Convert it to MP4 (H.264).";
+  return null;
+}
 
 </script>
 </body>

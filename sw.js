@@ -19,13 +19,14 @@ try { importScripts(MEGA_LIB); } catch (e) { libErr = e; }
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", e => e.waitUntil(self.clients.claim()));
 
-/* ---- MEGA catch-up ----
+/* ---- MEGA catch-up + saved copy ----
    A shared folder's listing can come back as a saved snapshot. MEGA's own site then asks for every change made
    since (the "sc" feed, starting from the snapshot's sequence number "sn"); megajs doesn't, so files added or
-   replaced after the snapshot stay invisible. megaLoadLive() reads the listing, asks for the changes since, applies
-   additions, deletions and updates to the raw list, and lets megajs itself decode the result (no crypto here).
-   Any failure along the way just keeps the plain listing. */
-const MEGA_RAW = {};
+   replaced after the snapshot stay invisible. megaLoadLive() gets the listing, catches up on the changes, and lets
+   megajs itself decode the result (no crypto here). The caught-up listing (still encrypted, as MEGA sent it) is
+   also kept in this browser (IndexedDB), so the next visit only fetches what changed since.
+   Any failure along the way falls back to a plain fresh listing. */
+const MEGA_RAW = {}, MEGA_CACHE_DAYS = 14;
 function megaLive(f){
   const api = f && f.api;
   if (!api || api.__live || typeof api.request !== "function") return f;
@@ -41,61 +42,96 @@ function megaLive(f){
   api.__live = true;
   return f;
 }
-async function megaLoadLive(makeFile, rootHandle){
+/* tiny key-value store in IndexedDB; every call quietly does nothing if storage isn't available */
+function kvOpen(){ return new Promise((res, rej) => { if (!self.indexedDB) return rej(new Error("no IndexedDB")); const r = indexedDB.open("rr-cache", 1);
+  r.onupgradeneeded = () => { if (!r.result.objectStoreNames.contains("kv")) r.result.createObjectStore("kv"); };
+  r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); r.onblocked = () => rej(new Error("blocked")); }); }
+async function kvDo(mode, fn){ try { const db = await kvOpen(); return await new Promise(res => { const tx = db.transaction("kv", mode), st = tx.objectStore("kv"); let out; const q = fn(st); if (q) q.onsuccess = () => { out = q.result; };
+  tx.oncomplete = () => { db.close(); res(out); }; tx.onerror = tx.onabort = () => { db.close(); res(undefined); }; }); } catch (_) { return undefined; } }
+const kvGet = k => kvDo("readonly", st => st.get(k));
+const kvSet = (k, v) => kvDo("readwrite", st => { st.put(v, k); });
+const kvDel = k => kvDo("readwrite", st => { st.delete(k); });
+async function megaCatchUp(gw, rootHandle, nodes, sn){
+  let ok = false, changes = 0;
+  nodes = nodes.slice();
+  for (let round = 0; round < 25; round++){
+    const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 10000);
+    let j;
+    try { j = await (await fetch(gw + "sc?" + new URLSearchParams({ sn, ssl: 1, n: rootHandle }), { method: "POST", signal: ctl.signal })).json(); }
+    catch (_) { break; }
+    finally { clearTimeout(timer); }
+    if (Array.isArray(j)) j = j[0];
+    if (!j || typeof j !== "object") break;                   /* an error code (e.g. the snapshot is too old) */
+    ok = true;
+    const acts = Array.isArray(j.a) ? j.a : [];
+    for (const p of acts){
+      if (!p || typeof p !== "object") continue;
+      if (p.a === "t" && p.t && Array.isArray(p.t.f)){
+        for (const n of p.t.f){ if (n && n.h){ nodes = nodes.filter(x => x.h !== n.h); nodes.push(n); changes++; } }
+      } else if (p.a === "d" && p.n){
+        const gone = new Set([p.n]);
+        for (let grew = true; grew; ){ grew = false; for (const x of nodes) if (!gone.has(x.h) && gone.has(x.p)){ gone.add(x.h); grew = true; } }
+        const before = nodes.length; nodes = nodes.filter(x => !gone.has(x.h)); if (nodes.length !== before) changes++;
+      } else if (p.a === "u" && p.n){
+        const i = nodes.findIndex(x => x.h === p.n);
+        if (i >= 0){ const x = Object.assign({}, nodes[i]); if (p.at) x.a = p.at; if (p.k) x.k = p.k; if (p.ts) x.ts = p.ts; nodes[i] = x; changes++; }
+      }
+    }
+    if (j.sn) sn = j.sn;
+    if (j.w || !acts.length || !j.sn) break;                   /* "w" = caught up */
+  }
+  return { ok, nodes, sn, changes };
+}
+/* decode a listing with megajs: the same listing request, answered with the given (still encrypted) list */
+async function megaBuild(makeFile, resp){
+  const g = makeFile(), realApi = g.api;
+  g.api = Object.create(realApi);
+  g.api.request = (req, cb, ...rest) => (req && req.a === "f" && typeof cb === "function") ? cb(null, resp) : realApi.request(req, cb, ...rest);
+  try { await g.loadAttributes(); } finally { g.api = realApi; }
+  return g;
+}
+async function megaLoadLive(makeFile, rootHandle, fresh = false){
+  const ck = "mega:" + rootHandle;
+  const gwOf = f => (f && f.api && f.api.gateway) || "https://g.api.mega.co.nz/";
+  if (!fresh){
+    const c = await kvGet(ck);
+    if (c && Array.isArray(c.f) && c.sn && Date.now() - (c.at || 0) < MEGA_CACHE_DAYS * 864e5){
+      try {
+        const r = await megaCatchUp(gwOf(megaLive(makeFile())), rootHandle, c.f, c.sn);
+        if (r.ok){
+          const merged = { f: r.nodes, sn: r.sn }, g = await megaBuild(makeFile, merged);
+          g.__caughtUp = r.changes; g.__fromCache = true;
+          MEGA_RAW[rootHandle] = merged; kvSet(ck, { f: r.nodes, sn: r.sn, at: Date.now() });
+          return g;
+        }
+      } catch (_) {}
+      kvDel(ck);                                                  /* unusable: start over with a fresh listing */
+    }
+  }
   const f = megaLive(makeFile());
   await f.loadAttributes();
   f.__caughtUp = 0;
   const raw = MEGA_RAW[rootHandle];
   if (!raw || !raw.sn) return f;
   try {
-    let nodes = raw.f.slice(), sn = raw.sn, changes = 0;
-    const gw = (f.api && f.api.gateway) || "https://g.api.mega.co.nz/";
-    for (let round = 0; round < 25; round++){
-      const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 10000);
-      let j;
-      try { j = await (await fetch(gw + "sc?" + new URLSearchParams({ sn, ssl: 1, n: rootHandle }), { method: "POST", signal: ctl.signal })).json(); }
-      finally { clearTimeout(timer); }
-      if (Array.isArray(j)) j = j[0];
-      if (!j || typeof j !== "object") break;                 /* an error code: keep what we have */
-      const acts = Array.isArray(j.a) ? j.a : [];
-      for (const p of acts){
-        if (!p || typeof p !== "object") continue;
-        if (p.a === "t" && p.t && Array.isArray(p.t.f)){
-          for (const n of p.t.f){ if (n && n.h){ nodes = nodes.filter(x => x.h !== n.h); nodes.push(n); changes++; } }
-        } else if (p.a === "d" && p.n){
-          const gone = new Set([p.n]);
-          for (let grew = true; grew; ){ grew = false; for (const x of nodes) if (!gone.has(x.h) && gone.has(x.p)){ gone.add(x.h); grew = true; } }
-          const before = nodes.length; nodes = nodes.filter(x => !gone.has(x.h)); if (nodes.length !== before) changes++;
-        } else if (p.a === "u" && p.n){
-          const i = nodes.findIndex(x => x.h === p.n);
-          if (i >= 0){ const x = Object.assign({}, nodes[i]); if (p.at) x.a = p.at; if (p.k) x.k = p.k; if (p.ts) x.ts = p.ts; nodes[i] = x; changes++; }
-        }
-      }
-      if (j.sn) sn = j.sn;
-      if (j.w || !acts.length || !j.sn) break;                 /* "w" = caught up */
+    const r = await megaCatchUp(gwOf(f), rootHandle, raw.f, raw.sn);
+    if (r.changes){
+      const merged = { f: r.nodes, sn: r.sn }, g = await megaBuild(makeFile, merged);
+      g.__caughtUp = r.changes; MEGA_RAW[rootHandle] = merged; kvSet(ck, { f: r.nodes, sn: r.sn, at: Date.now() });
+      return g;
     }
-    if (!changes) return f;
-    /* rebuild: the same listing request, answered with the caught-up list, decoded by megajs as usual */
-    const merged = Object.assign({}, raw, { f: nodes, sn });
-    const g = makeFile(), realApi = g.api;
-    g.api = Object.create(realApi);
-    g.api.request = (req, cb, ...rest) => (req && req.a === "f" && typeof cb === "function") ? cb(null, merged) : realApi.request(req, cb, ...rest);
-    await g.loadAttributes();
-    g.api = realApi;
-    g.__caughtUp = changes;
-    MEGA_RAW[rootHandle] = merged;
-    return g;
-  } catch (e) {
+    kvSet(ck, { f: raw.f, sn: r.ok ? r.sn : raw.sn, at: Date.now() });
     return f;
-  }
+  } catch (_) { return f; }
 }
 const roots = {}, rootAt = {};
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-function rootOf(root, key){
+function rootOf(root, key, fresh = false){
   const k = root + "#" + key;
+  if (fresh && roots[k] && Date.now() - (rootAt[k] || 0) > 1500) delete roots[k];   /* requests arriving together share one re-read */
   if (!roots[k]){
     rootAt[k] = Date.now();
-    roots[k] = megaLoadLive(() => self.mega.File.fromURL("https://mega.nz/folder/" + root + "#" + key), root).catch(e => { delete roots[k]; throw e; });
+    roots[k] = megaLoadLive(() => self.mega.File.fromURL("https://mega.nz/folder/" + root + "#" + key), root, fresh).catch(e => { delete roots[k]; throw e; });
   }
   return roots[k];
 }
@@ -107,10 +143,9 @@ async function nodeFor(root, key, id){
   let tries = 0;
   for (;;){
     let file = null, err = null;
-    try { file = find(await rootOf(root, key), id); } catch (e) { err = e; }
+    try { file = find(await rootOf(root, key, tries > 0), id); } catch (e) { err = e; }
     if (file) return file;
     if (tries++ >= 2){ if (err) throw err; return null; }
-    if (Date.now() - (rootAt[k] || 0) > 1500) delete roots[k];   /* requests arriving together share one re-read */
     await sleep(400 * tries);
   }
 }
