@@ -3,6 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://g.api.mega.co.nz" crossorigin><!-- opens the connection to MEGA while the page loads -->
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin><!-- where the MEGA library comes from -->
 <title>Rubric reviewer v2</title>
 <style>
 /* dark theme: a slightly deeper, warmer palette with clearer borders (matched to how Dark Reader showed the app) */
@@ -244,6 +246,7 @@ textarea.notes[hidden],.notesview[hidden]{display:none !important}
   .btn.o-yellow,.btn.o-yellow:hover{border-color:#93721e}
   .chip{border-color:#245797}
   :root{--liveblue:#245797}
+  select#taskSel option.cur{background:#245797;color:#fff}
   .del{border-color:#94291f}
   td.id textarea{color:#d8b041}
   .kindb.I{color:#57c667;border-color:#3e8f4e}
@@ -264,6 +267,8 @@ textarea.notes[hidden],.notesview[hidden]{display:none !important}
 .taskbar label{display:inline-flex;align-items:center;gap:8px;font-weight:600}
 .taskbar select{padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--fg);font:inherit;font-weight:400}
 .taskbar select#taskSel{min-width:260px}
+/* in the open task list, the task you're on keeps its own blue (the hover highlight still moves as usual) */
+#taskSel option.cur{background:#dce8f8;color:#0b2d57;font-weight:600}
 #copyTask{margin-left:-4px}
 .tasktip:empty{display:none}
 .taskbar input[type=search]{width:190px;padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--fg);font:inherit;font-weight:400}
@@ -628,10 +633,12 @@ function fillTaskSel(){
     return '<option value="' + escA(t.id) + '">' + (t.n + 2) + ". " + esc(t.id) + (cat ? " \u2014 " + esc(cat) : "") + '</option>';   /* t.n + 2 = the row in the spreadsheet (row 1 is the header) */
   }).join("");
   if (cur && list.includes(cur)) $("taskSel").value = cur.id;
+  markCurOpt();
   const q = $("taskSearch").value.trim();
   $("tfound").textContent = q ? (list.length ? list.length + " match" + (list.length === 1 ? "" : "es") : "No matches") : "";
   updNav();
 }
+function markCurOpt(){ for (const o of $("taskSel").options) o.classList.toggle("cur", !!cur && o.value === cur.id); }
 function updNav(){
   const list = sortedTasks(), i = cur ? list.indexOf(cur) : -1;
   $("prevT").disabled = i <= 0; $("nextT").disabled = i < 0 || i >= list.length - 1;
@@ -659,6 +666,7 @@ function selectTask(t){
   tcReset(); megaHide();
   if (cur){
     $("taskSel").value = cur.id;
+    markCurOpt();
     const bits = [sc(cur.n, "cat"), sc(cur.n, "model"), sc(cur.n, "dur") ? sc(cur.n, "dur") + " s" : ""].map(s => s.trim()).filter(Boolean);
     $("tmeta").textContent = bits.join(" \u00b7 ");
     $("rheadTask").textContent = cur.id;
@@ -756,7 +764,7 @@ function textsChanged(){ return tasks.some(t => Object.keys(TEXTS).some(k => t.t
 $("body").addEventListener("click", e => {
   const b = e.target.closest("button"); if (!b || !cur) return;
   const n = +b.dataset.n;
-  if (b.classList.contains("chip")){ viewSpec(b.dataset.t); return; }
+  if (b.classList.contains("chip")){ const tr = b.closest("tr"), a = tr && tr.querySelector("[data-n]"); if (a) warmFocus(+a.dataset.n); viewSpec(b.dataset.t); return; }
   if (b.classList.contains("chipcopy")){ copyText((cur.rows[n].ts || "").trim(), b.nextElementSibling); return; }
   if (b.classList.contains("del")){
     const r = cur.rows[n];
@@ -1577,14 +1585,20 @@ function fmtWait(ms){ const m = Math.max(1, Math.round(ms / 60000)); return m < 
 const quotaMsg = ms => "MEGA's download limit for your internet connection has been reached. It resets in about " + fmtWait(ms) + ". Parts you've already watched still play; the rest can load once it resets.";
 function warmList(t){
   const seen = new Set(), list = [];
-  t.rows.forEach(r => (r.ts || "").split(";").forEach(s => {
+  t.rows.forEach((r, row) => (r.ts || "").split(";").forEach(s => {
     const p = parseTs(s.trim()); if (!p) return;
     const c = t.vids.clips.find(x => normName(stem(x.name)) === normName(p.name));
     if (!c || !c.url.startsWith("/mega-stream/")) return;
     const k = c.name + "@" + Math.floor(p.sec);
-    if (!seen.has(k)){ seen.add(k); list.push({ c, sec: p.sec, k }); }
+    if (!seen.has(k)){ seen.add(k); list.push({ c, sec: p.sec, k, row }); }
   }));
   return list;   /* rubric row order (top to bottom, then left to right within a row), like you review; repeats keep their first place */
+}
+/* you clicked a timestamp in this row: preload from here down first, then the rows above (already passed) last */
+function warmFocus(row){
+  const j = warmJob; if (!j || j.t !== cur || !(row >= 0)) return;
+  const rest = j.list.slice(j.next);
+  j.list.splice(j.next, rest.length, ...rest.filter(it => it.row >= row), ...rest.filter(it => it.row < row));
 }
 function warmEl(i){
   if (!warmVs[i]){
@@ -1601,15 +1615,14 @@ function warmTask(t){
   if (warmJob){ warmJob.stop = true; warmAbort(); }
   const job = warmJob = { t, stop: false };
   t.warmDone = t.warmDone || new Set();
-  const list = warmList(t).filter(it => !t.warmDone.has(it.k));
-  let next = 0;
+  job.list = warmList(t).filter(it => !t.warmDone.has(it.k)); job.next = 0;
   const quiet = () => cur === t && ![...players].some(p => p.playing());
   const lane = async i => {
     const v = warmEl(i);
     v.__owner = job;                                                     /* a newer job takes the element over; an older one then leaves it alone */
     const gone = () => job.stop || v.__owner !== job;
     while (!gone()){
-      const it = list[next++]; if (!it) break;
+      const it = job.list[job.next++]; if (!it) break;
       for (let tries = 0; tries < 20 && !gone(); tries++){
         while (!gone() && !quiet()) await sleep(500);                    /* wait while anything plays or another task is open */
         if (gone()) break;

@@ -9,6 +9,7 @@
      the buffer-ahead of the visible clip, and the pre-loaded rubric moments are served instantly.
    - Decryption uses the browser's built-in AES (hardware-accelerated) instead of megajs's JavaScript AES,
      checked against megajs once per file; if they ever disagree it switches back for good (see "fast decryption").
+   - MEGA's download address for each file is reused for 30 minutes instead of asked for before every download.
    - Read-ahead: after the player's request finishes, the next few MB are fetched too (see READ_AHEAD).
    - MEGA's download limit is recognised: the worker stops asking MEGA until it resets and tells the page. */
 const MEGA_LIB = self.MEGA_LIB_URL || "https://cdn.jsdelivr.net/npm/megajs@1.3.10/dist/main.browser-umd.js";
@@ -312,11 +313,31 @@ function noteQuota(e){
 }
 const quotaError = () => new Error("MEGA download limit reached: " + Math.ceil((quotaUntil - Date.now()) / 1000) + " seconds until it resets");
 
+/* ---- reuse MEGA's download address ----
+   Before each download megajs asks MEGA's API where the file can be downloaded from ("g"). That address stays valid
+   for hours, so keep it for 30 minutes per file and skip that round trip on every new spot. If a download using it
+   fails, it's forgotten (gForget) and the retry asks MEGA again. */
+const G_TTL = 30 * 60 * 1000, gCache = new Map();
+const gKey = req => [req.n || "", req.p || "", req.ssl || 0, (req._querystring && req._querystring.n) || ""].join("|");
+function gWrap(api){
+  if (!api || Object.prototype.hasOwnProperty.call(api, "__g") || typeof api.request !== "function") return;
+  const orig = api.request.bind(api);
+  api.request = (req, cb, ...rest) => {
+    if (!req || req.a !== "g" || typeof cb !== "function") return orig(req, cb, ...rest);
+    const k = gKey(req), hit = gCache.get(k);
+    if (hit && Date.now() - hit.at < G_TTL){ setTimeout(() => cb(null, hit.resp), 0); return; }
+    return orig(req, (err, resp, ...more) => { if (!err && resp && typeof resp.g === "string") gCache.set(k, { resp, at: Date.now() }); cb(err, resp, ...more); }, ...rest);
+  };
+  api.__g = true;
+}
+function gForget(file){ const h = file && handleOf(file); if (h) for (const k of [...gCache.keys()]) if (k.startsWith(h + "|")) gCache.delete(k); }
+
 /* download blocks b0..b1 in one MEGA request, handing each complete (decrypted) block to onBlock in order */
 function fetchRun(file, b0, b1, size, onBlock, job){
   return new Promise((res, rej) => {
     const start = b0 * BLOCK, end = Math.min(size - 1, (b1 + 1) * BLOCK - 1);
     const fast = canFast(file);
+    gWrap(file.api);
     let ms; try { ms = file.download({ start, end, ...DL, returnCiphertext: fast }); } catch (e) { rej(e); return; }
     job.ms = ms;
     let chain = Promise.resolve(), failed = false;
@@ -362,7 +383,7 @@ async function readAhead(file, root, id, from, size){
   raBusy.add(fk);
   for (let b = i; b <= j; b++) inflight.add(ck(b));
   try { await fetchRun(file, i, j, size, (bi, bytes) => { cput(ck(bi), bytes); diskPut(ck(bi), bytes); inflight.delete(ck(bi)); }, { cancelled: false, ms: null }); }
-  catch (e) { noteQuota(e); }
+  catch (e) { if (!noteQuota(e)) gForget(file); }
   finally { for (let b = i; b <= j; b++) inflight.delete(ck(b)); raBusy.delete(fk); }
 }
 
@@ -409,7 +430,7 @@ async function serve(req, u){
             try {
               for (let attempt = 0; next <= j; attempt++){
                 try { await fetchRun(file, next, j, size, (bi, bytes) => { cput(ck(bi), bytes); diskPut(ck(bi), bytes); inflight.delete(ck(bi)); send(bi, bytes); next = bi + 1; }, job); break; }
-                catch (e) { if (job.cancelled || noteQuota(e) || attempt >= 2) throw e; await sleep(500 * (attempt + 1)); }
+                catch (e) { if (job.cancelled || noteQuota(e)) throw e; gForget(file); if (attempt >= 2) throw e; await sleep(500 * (attempt + 1)); }
               }
             } finally { for (let b = i; b <= j; b++) inflight.delete(ck(b)); }
             i = j + 1;
