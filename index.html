@@ -1129,12 +1129,12 @@ function makePlayer(host, url, name, copyPrefix = ""){
   const keepSpot = () => { if (!v.error && v.readyState >= 1) lastT = here(); };
   v.addEventListener("seeking", keepSpot); v.addEventListener("timeupdate", keepSpot);
   v.addEventListener("play", () => { resumePlay = true; }); v.addEventListener("pause", () => { if (!v.error) resumePlay = false; });
-  const reload = (force = false) => {
+  const reload = (force = false, fresh = false) => {
     reloading = true;
     const t = lastT, go = resumePlay; pendT = null;
     err.hidden = false; err.textContent = "Reconnecting to MEGA…";
     v.removeAttribute("src"); v.load();
-    v.src = isMega ? url + "?r=" + Date.now() + (force ? "&q=1" : "") : url;   /* a fresh request; q=1 (Reload video pressed) makes the worker try MEGA again even if its limit was hit */
+    v.src = isMega ? url + "?r=" + Date.now() + (force ? "&q=1" : "") + (fresh ? "&fresh=1" : "") : url;   /* a fresh request; q=1 (Reload video pressed) makes the worker try MEGA again even if its limit was hit */
     v.addEventListener("loadedmetadata", () => {
       reloading = false;
       if (t) goTo(Math.min(t, (v.duration || t) - 0.05));
@@ -1144,6 +1144,7 @@ function makePlayer(host, url, name, copyPrefix = ""){
   };
   const showErr = async () => {
     err.hidden = false;
+    if (isMega && !everLoaded) return showMegaErr();
     err.textContent = "This browser can't play " + name + ". It may use a format like ProRes or HEVC. Convert it to MP4 (H.264) or WebM.";
     if (!everLoaded) probeFormat(url).then(f => { const a = formatAdvice(name, f); if (a && !everLoaded && !err.querySelector("button")) err.textContent = "Can't play: " + a; });
     let why = "";
@@ -1155,6 +1156,27 @@ function makePlayer(host, url, name, copyPrefix = ""){
     const b = document.createElement("button"); b.className = "btn o-blue"; b.type = "button"; b.textContent = "Reload video";
     b.addEventListener("click", () => { fails = []; reload(true); });
     err.append(msg, b);
+  };
+  /* a MEGA video that never started: work out whether it's the download, the data, or really the format */
+  const showMegaErr = async () => {
+    err.textContent = "Checking why " + name + " won't play\u2026";
+    const d = await megaDiag(url), f = d.looksVideo ? await probeFormat(url) : null, advice = f && formatAdvice(name, f);
+    let why;
+    if (d.fail) why = "Couldn't stream " + name + " from MEGA: " + d.fail;
+    else if (d.broke) why = "The download of " + name + " from MEGA broke partway (" + d.broke + ").";
+    else if (!d.looksVideo) why = "MEGA sent data for " + name + " that isn't a readable video. The file's format isn't the problem: the app most likely picked up an old copy of it or the wrong key. Reload video clears what's saved for it and reads the MEGA folder again.";
+    else if (advice) why = "Can't play: " + advice;
+    else why = name + " is a normal, playable video format" + (f && f.cc ? " (" + f.cc.trim() + ")" : "") + ", so the format isn't the problem: the stream from MEGA broke while the player was loading it.";
+    if (everLoaded) return;
+    err.innerHTML = "";
+    const msg = document.createElement("span"); msg.textContent = why + " ";
+    const b = document.createElement("button"); b.className = "btn o-blue"; b.type = "button"; b.textContent = "Reload video";
+    b.addEventListener("click", () => { fails = []; reload(true, true); });
+    const c = document.createElement("button"); c.className = "btn"; c.type = "button"; c.textContent = "Copy details"; c.style.marginLeft = "8px";
+    const tip = document.createElement("span"); tip.className = "tip"; tip.style.marginLeft = "8px";
+    c.addEventListener("click", () => copyText(megaDetails(name, url, v, d, f), tip));
+    err.append(msg, b);
+    if (!advice) err.append(c, tip);
   };
   const showQuota = left => {
     reloading = false; err.hidden = false; err.innerHTML = "";
@@ -1819,6 +1841,33 @@ const WARM_LANES = 2;
 let warmVs = [], warmJob = null;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 /* MEGA's download limit: the streaming worker knows when it was hit and how long until it resets (0 = not limited) */
+/* fetch the start of a MEGA stream and check it really is video data (used when a MEGA video won't start) */
+async function megaDiag(url){
+  const d = { status: 0, range: "", head: "", looksVideo: false, fail: "", broke: "", wc: null };
+  try { const r = await fetch("/mega-stream/__status", { cache: "no-store" }); if (r.ok) d.wc = await r.json(); } catch (_) {}
+  let r;
+  try { r = await fetch(url, { headers: { Range: "bytes=0-65535" } }); } catch (e) { d.fail = "couldn't reach the streaming worker (" + String(e.message || e) + ")"; return d; }
+  d.status = r.status; d.range = r.headers.get("content-range") || ""; d.len = r.headers.get("content-length") || "";
+  if (!r.ok){ d.fail = (await r.text().catch(() => "")).slice(0, 200) || "error " + r.status; return d; }
+  let b;
+  try { b = new Uint8Array(await r.arrayBuffer()); } catch (e) { d.broke = String(e.message || e); return d; }
+  d.got = b.length;
+  d.head = Array.from(b.subarray(0, 16), x => x.toString(16).padStart(2, "0")).join(" ");
+  const box = String.fromCharCode(...b.subarray(4, 8));
+  d.looksVideo = ["ftyp", "moov", "mdat", "free", "skip", "wide", "pnot"].includes(box) || (b[0] === 0x1a && b[1] === 0x45 && b[2] === 0xdf && b[3] === 0xa3);
+  return d;
+}
+/* what "Copy details" puts on the clipboard: enough to diagnose, without the folder's decryption key */
+function megaDetails(name, url, v, d, f){
+  const p = url.split("/");                                               /* /mega-stream/<root>/<key>/<handle>/<name> */
+  return ["Video: " + name, "MEGA folder: " + (p[2] || "?") + ", file handle: " + (p[4] || "?"),
+    "Player error: " + (v.error ? v.error.code + " " + (v.error.message || "") : "none"),
+    "Stream: status " + d.status + ", " + (d.range || "no range") + ", got " + (d.got || 0) + " bytes" + (d.fail ? ", failed: " + d.fail : "") + (d.broke ? ", broke: " + d.broke : ""),
+    "First bytes: " + (d.head || "none") + " (" + (d.looksVideo ? "looks like video" : "not video data") + ")",
+    "Format: " + (f ? (f.cc || "?") + (f.prof ? " profile " + f.prof : "") : "unknown"),
+    "Decryption: " + (d.wc ? (d.wc.fastDecrypt ? "built-in" : "megajs" + (d.wc.fastDecryptError ? " (" + d.wc.fastDecryptError + ")" : "")) : "unknown"),
+    "Browser: " + navigator.userAgent].join("\n");
+}
 async function megaQuotaLeft(){ try { const r = await fetch("/mega-stream/__status", { cache: "no-store" }); return r.ok ? +((await r.json()).quotaLeft) || 0 : 0; } catch (_) { return 0; } }
 function fmtWait(ms){ const m = Math.max(1, Math.round(ms / 60000)); return m < 60 ? m + " min" : Math.floor(m / 60) + " h" + (m % 60 ? " " + (m % 60) + " min" : ""); }
 const quotaMsg = ms => "MEGA's download limit for your internet connection has been reached. It resets in about " + fmtWait(ms) + ". Parts you've already watched still play; the rest can load once it resets.";

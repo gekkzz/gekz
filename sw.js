@@ -144,12 +144,12 @@ function rootOf(root, key, fresh = false){
 /* Find a file in the shared folder. If it seems to be missing, the folder listing we kept may be stale or
    incomplete (MEGA can answer partially when it's busy, e.g. during fast scrubbing), so read the folder again
    and look once more instead of failing for the rest of the session. */
-async function nodeFor(root, key, id){
+async function nodeFor(root, key, id, fresh = false){
   const k = root + "#" + key;
   let tries = 0;
   for (;;){
     let file = null, err = null;
-    try { file = find(await rootOf(root, key, tries > 0), id); } catch (e) { err = e; }
+    try { file = find(await rootOf(root, key, fresh || tries > 0), id); } catch (e) { err = e; }
     if (file) return file;
     if (tries++ >= 2){ if (err) throw err; return null; }
     await sleep(400 * tries);
@@ -229,6 +229,16 @@ function diskEvict(){
 function diskDelete(keys){
   if (!disk || !keys.length) return;
   try { const tx = disk.db.transaction(["b", "m"], "readwrite"); keys.forEach(k => { tx.objectStore("b").delete(k); tx.objectStore("m").delete(k); }); } catch (_) {}
+}
+/* forget everything saved for one file (memory and disk), so the next request downloads it fresh */
+async function purgeFile(root, id){
+  const pre = root + "/" + id + "/";
+  for (const [k, v] of [...cache.entries()]) if (k.startsWith(pre)){ cache.delete(k); cacheBytes -= v.byteLength; }
+  await diskOpen();
+  if (!disk) return;
+  const gone = [...disk.meta.keys()].filter(k => k.startsWith(pre));
+  gone.forEach(k => { const m = disk.meta.get(k); disk.meta.delete(k); disk.total -= m.size; });
+  diskDelete(gone);
 }
 /* pieces being downloaded right now: a second request for the same piece waits for it instead of downloading it twice */
 const inflight = new Set();
@@ -393,7 +403,10 @@ async function serve(req, u){
     const [root, key, id] = u.pathname.slice("/mega-stream/".length).split("/").map(decodeURIComponent);
     const warm = u.searchParams.has("w");                                  /* a hidden preloader: no read-ahead */
     if (u.searchParams.has("q")) quotaUntil = 0;                            /* "Reload video" pressed: try MEGA again now */
-    const file = await nodeFor(root, key, id);
+    const fresh = u.searchParams.has("fresh");                              /* Reload video after an error: start this file from scratch */
+    if (fresh) await purgeFile(root, id);
+    const file = await nodeFor(root, key, id, fresh);
+    if (fresh && file) gForget(file);
     await diskOpen();
     if (!file || file.directory) return new Response("Not found in the MEGA folder", { status: 404 });
     const size = file.size || 0;
