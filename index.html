@@ -658,10 +658,31 @@ function load(text, name){
   fillTaskSel();
   note("");
   sheetHash = hashText(text);
+  sheetRecSave(name, text, sheetHash);
   const lastId = lastTaskGet(sheetHash), last = lastId && tasks.find(t => t.id === lastId);
   selectTask(last || first);                                  /* reopen on the task you were on with this sheet */
   saveKey = SAVE_PREFIX + sheetHash; $("saveInd").textContent = ""; $("saveInd").classList.remove("err");
   offerRestore();
+}
+
+/* ---------- reopen the sheet after a reload ----------
+   The last CSV you loaded is kept in this browser (IndexedDB), so if the page reloads (a refresh, Chrome restarting the
+   tab to free memory, a crash) it comes straight back on the task you were on, and that task's MEGA videos load again
+   if you had loaded them. Uploading another CSV replaces it. */
+const SHEET_KEY = "sheet:last", SHEET_KEEP_DAYS = 14;
+function sheetRecSave(name, text, hash){
+  kvGet(SHEET_KEY).then(o => kvSet(SHEET_KEY, { name, text, hash, at: Date.now(), megaTasks: o && o.hash === hash ? (o.megaTasks || []) : [] }));
+}
+function sheetRecMega(id){
+  const h = sheetHash;
+  kvGet(SHEET_KEY).then(o => { if (!o || o.hash !== h || (o.megaTasks || []).includes(id)) return; o.megaTasks = (o.megaTasks || []).concat(id).slice(-200); kvSet(SHEET_KEY, o); });
+}
+async function sheetRestore(){
+  if (sheet) return;
+  const o = await kvGet(SHEET_KEY);
+  if (sheet || !o || !o.text || !(Date.now() - o.at < SHEET_KEEP_DAYS * 864e5)) return;
+  load(o.text, o.name);
+  if (cur && (o.megaTasks || []).includes(cur.id)) megaLoad();
 }
 
 /* tasks always in the sheet's own row order, narrowed by the Search box (matches task ID or category) */
@@ -1783,7 +1804,7 @@ async function megaLoad(opts = {}){
   t.mega = "loading"; setMegaBtn(); note("");
   let ok = false;
   try { ok = await megaLoadInner(opts); } finally { t.mega = ok ? "ready" : "idle"; if (t === cur) setMegaBtn(); }
-  if (ok) warmTask(t);
+  if (ok){ warmTask(t); sheetRecMega(t.id); }
   return ok;
 }
 
@@ -2623,6 +2644,7 @@ function formatAdvice(name, f){
   return null;
 }
 
+sheetRestore();   /* last: everything above is set up */
 </script>
 </body>
 </html>
