@@ -18,7 +18,12 @@ const CACHE_MAX = 400 * BLOCK;             /* memory used for cached video, olde
 const MAX_RESPONSE = 32 * BLOCK;           /* most sent for one request; the player asks again for more */
 const OPEN_RESPONSE = 8 * BLOCK;           /* for open-ended requests ("from here on"), so little is wasted when the player jumps */
 const DL = { maxConnections: 6, initialChunkSize: BLOCK, chunkSizeIncrement: BLOCK, maxChunkSize: 4 * BLOCK };
-const READ_AHEAD = 4;                      /* blocks fetched past the end of what the player asked for (not for the hidden preloaders) */
+const READ_AHEAD = 4;
+/* time limits, so a dropped connection can't leave anything waiting forever (the worker outlives page reloads) */
+const STALL_MS = self.RR_STALL_MS || 25000;           /* a download that receives nothing for this long is abandoned and retried */
+const G_TIMEOUT = self.RR_G_TIMEOUT || 20000;          /* MEGA's answer with a file's download address */
+const LIST_TIMEOUT = self.RR_LIST_TIMEOUT || 45000;    /* reading the folder listing */
+const withTimeout = (p, ms, msg) => new Promise((res, rej) => { const t = setTimeout(() => rej(new Error(msg)), ms); p.then(v => { clearTimeout(t); res(v); }, e => { clearTimeout(t); rej(e); }); });                      /* blocks fetched past the end of what the player asked for (not for the hidden preloaders) */
 let libErr = null;
 try { importScripts(MEGA_LIB); } catch (e) { libErr = e; }
 
@@ -137,7 +142,8 @@ function rootOf(root, key, fresh = false){
   if (fresh && roots[k] && Date.now() - (rootAt[k] || 0) > 1500) delete roots[k];   /* requests arriving together share one re-read */
   if (!roots[k]){
     rootAt[k] = Date.now();
-    roots[k] = megaLoadLive(() => self.mega.File.fromURL("https://mega.nz/folder/" + root + "#" + key), root, fresh).catch(e => { delete roots[k]; throw e; });
+    roots[k] = withTimeout(megaLoadLive(() => self.mega.File.fromURL("https://mega.nz/folder/" + root + "#" + key), root, fresh), LIST_TIMEOUT, "MEGA didn't send the folder listing in time")
+      .catch(e => { delete roots[k]; throw e; });
   }
   return roots[k];
 }
@@ -234,6 +240,8 @@ function diskDelete(keys){
 async function purgeFile(root, id){
   const pre = root + "/" + id + "/";
   for (const [k, v] of [...cache.entries()]) if (k.startsWith(pre)){ cache.delete(k); cacheBytes -= v.byteLength; }
+  for (const k of [...inflight]) if (k.startsWith(pre)) inflight.delete(k);   /* don't wait on downloads that may be stuck */
+  raBusy.delete(root + "/" + id);
   await diskOpen();
   if (!disk) return;
   const gone = [...disk.meta.keys()].filter(k => k.startsWith(pre));
@@ -336,7 +344,9 @@ function gWrap(api){
     if (!req || req.a !== "g" || typeof cb !== "function") return orig(req, cb, ...rest);
     const k = gKey(req), hit = gCache.get(k);
     if (hit && Date.now() - hit.at < G_TTL){ setTimeout(() => cb(null, hit.resp), 0); return; }
-    return orig(req, (err, resp, ...more) => { if (!err && resp && typeof resp.g === "string") gCache.set(k, { resp, at: Date.now() }); cb(err, resp, ...more); }, ...rest);
+    let done = false;
+    const t = setTimeout(() => { if (!done){ done = true; cb(new Error("MEGA didn't answer in time")); } }, G_TIMEOUT);   /* a late answer is ignored */
+    return orig(req, (err, resp, ...more) => { if (done) return; done = true; clearTimeout(t); if (!err && resp && typeof resp.g === "string") gCache.set(k, { resp, at: Date.now() }); cb(err, resp, ...more); }, ...rest);
   };
   api.__g = true;
 }
@@ -350,7 +360,13 @@ function fetchRun(file, b0, b1, size, onBlock, job){
     gWrap(file.api);
     let ms; try { ms = file.download({ start, end, ...DL, returnCiphertext: fast }); } catch (e) { rej(e); return; }
     job.ms = ms;
-    let chain = Promise.resolve(), failed = false;
+    let chain = Promise.resolve(), failed = false, last = Date.now();
+    /* watchdog: if the connection drops mid-download MEGA's stream can go silent without ending or erroring */
+    const dog = setInterval(() => {
+      if (job.cancelled || failed){ clearInterval(dog); return; }
+      if (Date.now() - last > STALL_MS){ clearInterval(dog); failed = true; try { ms.destroy(); } catch (_) {} rej(new Error("MEGA download stalled (no data for " + Math.round(STALL_MS / 1000) + "s)")); }
+    }, 1000);
+    const stopDog = () => clearInterval(dog);
     const emit = (i, bytes) => {
       if (!fast){ onBlock(i, bytes); return; }
       chain = chain.then(async () => { if (job.cancelled || failed) return; const out = await decryptBlock(file, i * BLOCK, bytes); if (!job.cancelled && !failed) onBlock(i, out); })
@@ -363,13 +379,14 @@ function fetchRun(file, b0, b1, size, onBlock, job){
       have -= n; return out;
     };
     ms.on("data", d => {
+      last = Date.now();
       if (job.cancelled) return;
       parts.push(d instanceof Uint8Array ? d : new Uint8Array(d)); have += d.length;
       while (have >= BLOCK) emit(bi++, take(BLOCK));
     });
-    ms.on("end", () => { if (have > 0) emit(bi++, take(have)); chain.then(() => { if (!failed) res(); }); });
-    ms.on("error", e => { failed = true; rej(e); });                       /* blocks still being decrypted are dropped; the retry refetches them */
-    ms.on("close", () => { if (job.cancelled) res(); });
+    ms.on("end", () => { stopDog(); if (have > 0) emit(bi++, take(have)); chain.then(() => { if (!failed) res(); }); });
+    ms.on("error", e => { stopDog(); failed = true; rej(e); });            /* blocks still being decrypted are dropped; the retry refetches them */
+    ms.on("close", () => { if (job.cancelled){ stopDog(); res(); } });
   });
 }
 
