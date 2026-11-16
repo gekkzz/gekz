@@ -210,6 +210,7 @@ tr.flashrow{outline:2px solid #7cc4ff;outline-offset:-2px}
 .sbsbar .bfsgrp{display:inline-flex;align-items:center;gap:2px;border:1px solid var(--line);border-radius:8px;padding:0 2px;align-self:center}
 .sbsbar .sbstip + .bfsgrp{margin-left:0}
 .sbsbar .bfsgrp + .sub.szc{margin-left:0}
+.sbsbar .sub.szc + .sub.szc{margin-left:0}                                  /* Edit and Copy sit together */
 .bfsb{all:unset;cursor:pointer;width:28px;height:30px;display:inline-flex;align-items:center;justify-content:center;border-radius:6px;color:var(--fg);font-size:15px}
 .bfsb:hover{background:var(--btn)}
 .bfsb[disabled]{opacity:.35;cursor:not-allowed;background:none}
@@ -253,7 +254,7 @@ tr.flashrow{outline:2px solid #7cc4ff;outline-offset:-2px}
 .fquote.ww{font-size:14px}                                                                                                         /* same as Went Wrong (follows its text size) */
 .fquote .fl{color:var(--mut);font-size:12px}
 .fquote .fts{display:block;margin-top:4px;font-size:13px}
-.fwhy{font:inherit;font-weight:700;color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:var(--panel);line-height:1.4;resize:none;overflow:hidden;min-height:20px}
+.fwhy{font:inherit;font-weight:400;color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:var(--panel);line-height:1.4;resize:none;overflow:hidden;min-height:20px}
 .fwhy::placeholder{font-weight:400;font-style:italic;color:var(--mut)}
 .fbtns{display:flex;gap:8px;justify-content:flex-end;align-items:center}
 .fbtn{all:unset;cursor:pointer;padding:4px 12px;border:2px solid var(--liveblue);border-radius:7px;font-size:13px;color:var(--fg)}
@@ -513,7 +514,7 @@ td.id{width:64px}
     <div id="badHome">
       <div class="stage" id="badStage">
         <div class="nhead top"><label for="notesBad">Went Wrong</label>
-          <span class="nact"><span class="tip" id="btip" aria-live="polite"></span><button class="btn" id="bcopy">Copy to clipboard</button></span></div>
+          <span class="nact"><span class="tip" id="btip" aria-live="polite"></span><button class="btn" id="bedit" type="button" title="Edit the Went Wrong notes">Edit</button><button class="btn" id="bcopy">Copy to clipboard</button></span></div>
         <textarea id="notesBad" class="notes solo" spellcheck="false" placeholder="Write what the model could have done better (column T)"></textarea>
       </div>
     </div>
@@ -1363,10 +1364,10 @@ function flagsSorted(t){
 }
 const flagLabel = f => f.kind === "r" ? (f.id || f.k.slice(2)) : "Went Wrong";
 const flagPlain = f => flagLabel(f) + " \u2014 " + f.text + (f.why.trim() ? "\n" + f.why.trim() : "");
-/* rich text for Google Sheets: bold as inline CSS (what Sheets reads when pasting), line breaks kept inside the one cell */
-const flagHTML = f => '<span style="font-weight:normal">' + esc(flagLabel(f)) + " \u2014 " + esc(f.text) + '</span>'
-  + (f.why.trim() ? '<br><span style="font-weight:bold">' + esc(f.why.trim()).replace(/\n/g, "<br>") + '</span>' : "");
-/* copied as rich text (one spreadsheet cell, reason in bold) with plain text alongside for places that don't take formatting.
+/* rich text for Google Sheets: everything in one cell, line breaks kept inside it */
+const flagHTML = f => '<span>' + esc(flagLabel(f)) + " \u2014 " + esc(f.text) + '</span>'
+  + (f.why.trim() ? '<br><span>' + esc(f.why.trim()).replace(/\n/g, "<br>") + '</span>' : "");
+/* copied as rich text (one spreadsheet cell) with plain text alongside for places that don't take formatting.
    Written through a copy event first: unlike navigator.clipboard.write, Chrome passes that HTML on untouched (no sanitising),
    so the bold styling and the keep-line-breaks-in-one-cell hint reach Google Sheets as written. */
 async function copyRich(plain, html, tip){
@@ -1405,7 +1406,7 @@ function renderFlags(){
         + (f.kind === "r" && f.id ? '<span class="ftag tslink" data-row="' + escA(f.id) + '" title="Show this row">' + FLAG_SVG + ' Rubric ' + esc(f.id) + '</span>' : '<span class="ftag">' + FLAG_SVG + ' ' + esc(f.kind === "r" ? "Rubric " + flagLabel(f) : "Went Wrong") + '</span>')
         + '<button class="fbtn quiet" type="button" data-fact="rm">Remove</button></div>'
         + '<div class="fquote' + (f.kind === "w" ? ' ww" style="font-size:' + bfs + 'px' : "") + '">' + linkify(f.text) + (f.kind === "r" && f.ts ? '<span class="fts"><span class="fl">Timestamps:</span> ' + linkify(f.ts) + '</span>' : "") + '</div>'
-        + '<textarea class="fwhy" rows="1" spellcheck="true" placeholder="What\u2019s wrong? (copied in bold)"></textarea>'
+        + '<textarea class="fwhy" rows="1" spellcheck="true" placeholder="What\u2019s wrong?"></textarea>'
         + '<div class="fbtns"><span class="tip" aria-live="polite"></span><button class="fbtn" type="button" data-fact="copy">Copy</button></div></div>').join("");
   st.querySelectorAll(".fcard").forEach(c => { const f = list.find(x => x.k === c.dataset.k), ta = c.querySelector(".fwhy"); ta.value = f.why; fitWhy(ta); });
 }
@@ -2178,6 +2179,7 @@ function sbsBar(h){
     + (half.sel === "bad" && sbsOwner("bad") === h
        ? '<span class="tip sbstip" aria-live="polite"></span>'
          + '<span class="bfsgrp"><button class="bfsb" type="button" data-bfs="-1" aria-label="Smaller text" title="Smaller text"' + (bfs <= BFS_MIN ? " disabled" : "") + '>&minus;</button><span class="bfsval" aria-live="polite">' + bfs + 'px</span><button class="bfsb" type="button" data-bfs="1" aria-label="Larger text" title="Larger text"' + (bfs >= BFS_MAX ? " disabled" : "") + '>+</button></span>'
+         + btn(" szc", 'data-editbad="1" title="Edit the Went Wrong notes"', $("notesBad").hidden ? "Edit" : "Done", !$("notesBad").hidden)
          + btn(" szc", 'data-copybad="1" title="Copy the Went Wrong notes"', "Copy", false) : "");
 }
 
@@ -2270,9 +2272,11 @@ function sbsPick(h, sel, clips){
   sbsSave(); sbsRender(pos);   /* sbsRender pauses only the videos that leave the screen */
 }
 [0, 1].forEach(h => {
+  $("sbsBar" + h).addEventListener("mousedown", e => { if (e.target.closest("[data-editbad]")) e.preventDefault(); });   /* keep the text focused so Done can close it */
   $("sbsBar" + h).addEventListener("click", e => {
     const b = e.target.closest("button"); if (!b) return;
     if (b.dataset.bfs){ setBFS(bfs + (+b.dataset.bfs) * BFS_STEP); return; }
+    if (b.dataset.editbad){ editBadToggle(); return; }
     if (b.dataset.copybad){ const t = $("notesBad").value.replace(/\s+$/, ""), tip = b.closest(".sbsbar").querySelector(".sbstip");
       if (t) copyText(t, tip); else { tip.textContent = "Nothing to copy"; clearTimeout(tip._t); tip._t = setTimeout(() => { tip.textContent = ""; }, 1300); } return; }
     if (b.dataset.sz){ safeZone = !safeZone; try { localStorage.setItem("rr-safezone", safeZone ? "1" : "0"); } catch (_) {} sbsRender(); return; }
@@ -2526,6 +2530,9 @@ function viewRow(id, avoid = -1){
   tr.classList.remove("jumped"); void tr.offsetWidth; tr.classList.add("jumped");   /* a brief flash so the eye lands on it */
   setTimeout(() => tr.classList.remove("jumped"), 1600);
 }
+/* Went Wrong's Edit button (Side by Side bar and the Verdicts header): Edit opens the text for editing, Done closes it */
+function editBadToggle(){ const ta = $("notesBad"); if (ta.hidden) ta._edit(); else ta.blur(); }
+function editBadLabels(){ const on = !$("notesBad").hidden; document.querySelectorAll("[data-editbad], #bedit").forEach(b => { b.textContent = on ? "Done" : "Edit"; b.classList.toggle("on", on); if (b.closest(".sub")) b.closest(".sub").classList.toggle("on", on); }); }
 LINKED.forEach(id => {
   const ta = $(id), view = document.createElement("div");
   view.className = "notes solo notesview"; view.tabIndex = 0; view.setAttribute("role", "textbox"); view.setAttribute("aria-label", ta.labels && ta.labels[0] ? ta.labels[0].textContent : "Notes");
@@ -2549,22 +2556,28 @@ LINKED.forEach(id => {
       if (b.dataset.gen != null && id === "notesBad"){ const end = b.dataset.end ? +b.dataset.end : null, list = tsItems("ww"), i = list.findIndex(x => x.gen === +b.dataset.gen && x.end === end); if (i >= 0){ tsSet("ww", i); tsMark("ww", list[i]); } }
       openLink(b, view); return;
     }
+    if (id === "notesBad") return;                                         /* Went Wrong edits only through its Edit button (misclicks near links) */
     const sel = window.getSelection(); if (sel && !sel.isCollapsed && view.contains(sel.anchorNode)) return;   /* selecting text to copy */
     edit(caretOffset(view, e.clientX, e.clientY));
   });
+  ta._edit = () => edit(null);
   view.addEventListener("keydown", e => {
     if (e.target.classList.contains("tslink") && (e.key === "Enter" || e.key === " ")){ e.preventDefault(); e.target.click(); return; }
     if (e.target === view && (e.key === "Enter" || e.key === "F2")){ e.preventDefault(); edit(ta.value.length); }
   });
+  ta.addEventListener("focus", () => { if (id === "notesBad") editBadLabels(); });
   ta.addEventListener("blur", () => {
     renderNoteView(ta);
     if (ta.style.height) view.style.height = ta.style.height;
     const st = ta.scrollTop;
     ta.hidden = true; view.hidden = false; view.scrollTop = st;
     liveUpdate();
+    if (id === "notesBad") editBadLabels();
   });
   renderNoteView(ta);
 });
+$("bedit").addEventListener("mousedown", e => e.preventDefault());
+$("bedit").addEventListener("click", editBadToggle);
 fitPanes();
 
 /* ---------- rubric filter (in the rubric header beside Side by Side / Prompt / Multi-Take; the Rubric tab always shows every row) ---------- */
