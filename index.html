@@ -1145,7 +1145,7 @@ function makePlayer(host, url, name, copyPrefix = ""){
   };
   const showErr = async () => {
     err.hidden = false;
-    if (isMega && !everLoaded) return showMegaErr();
+    if (isMega) return showMegaErr();
     err.textContent = "This browser can't play " + name + ". It may use a format like ProRes or HEVC. Convert it to MP4 (H.264) or WebM.";
     if (!everLoaded) probeFormat(url).then(f => { const a = formatAdvice(name, f); if (a && !everLoaded && !err.querySelector("button")) err.textContent = "Can't play: " + a; });
     let why = "";
@@ -1163,12 +1163,13 @@ function makePlayer(host, url, name, copyPrefix = ""){
     err.textContent = "Checking why " + name + " won't play\u2026";
     const d = await megaDiag(url), f = d.looksVideo ? await probeFormat(url) : null, advice = f && formatAdvice(name, f);
     let why;
+    if (d.gone && !megaRefound.has(url)){ err.textContent = "Finding the current copy of " + name + " on MEGA\u2026"; megaRefind(url, name); return; }
     if (d.fail) why = "Couldn't stream " + name + " from MEGA: " + d.fail;
     else if (d.broke) why = "The download of " + name + " from MEGA broke partway (" + d.broke + ").";
     else if (!d.looksVideo) why = "MEGA sent data for " + name + " that isn't a readable video. The file's format isn't the problem: the app most likely picked up an old copy of it or the wrong key. Reload video clears what's saved for it and reads the MEGA folder again.";
     else if (advice) why = "Can't play: " + advice;
-    else why = name + " is a normal, playable video format" + (f && f.cc ? " (" + f.cc.trim() + ")" : "") + ", so the format isn't the problem: the stream from MEGA broke while the player was loading it.";
-    if (everLoaded) return;
+    else why = name + " is a normal, playable video format" + (f && f.cc ? " (" + f.cc.trim() + ")" : "") + ", so the format isn't the problem: the stream from MEGA broke while the player was loading it." + (d.swErr ? " MEGA said: " + d.swErr : "");
+    if (!v.error && v.readyState >= 2) why = name + " hit repeated errors while loading. It looks fine now; if it stalls again, reload it.";   /* recovered while we were checking */
     err.innerHTML = "";
     const msg = document.createElement("span"); msg.textContent = why + " ";
     const b = document.createElement("button"); b.className = "btn o-blue"; b.type = "button"; b.textContent = "Reload video";
@@ -1188,6 +1189,10 @@ function makePlayer(host, url, name, copyPrefix = ""){
   };
   v.addEventListener("error", async () => {
     if (isMega){ const left = await megaQuotaLeft(); if (left > 0){ showQuota(left); return; } }   /* MEGA's limit: reloading won't help */
+    if (isMega && !megaRefound.has(url)){                                 /* MEGA says this copy is gone: find the current file instead of retrying */
+      const st = await megaWorkerState();
+      if (st && st.gone && st.gone.includes(megaKeyOf(url))){ err.hidden = false; err.textContent = "Finding the current copy of " + name + " on MEGA\u2026"; megaRefind(url, name); return; }
+    }
     if (everLoaded || isMega){
       const now = Date.now(); fails = fails.filter(x => now - x < 60000); fails.push(now);
       if (fails.length <= 3){ setTimeout(reload, 300 * fails.length); return; }
@@ -1842,10 +1847,28 @@ const WARM_LANES = 2;
 let warmVs = [], warmJob = null;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 /* MEGA's download limit: the streaming worker knows when it was hit and how long until it resets (0 = not limited) */
+/* the worker reports files MEGA says no longer exist (an old copy of a replaced video, kept in a saved folder listing) */
+async function megaWorkerState(){ try { const r = await fetch("/mega-stream/__status", { cache: "no-store" }); return r.ok ? await r.json() : null; } catch (_) { return null; } }
+const megaKeyOf = url => { const p = url.split("/").map(decodeURIComponent); return p[2] + "/" + p[4]; };   /* root/handle, as the worker names it */
+const megaRefound = new Set();
+/* forget the saved folder listing and look this task's videos up on MEGA again; replaced ones are swapped for the current files */
+async function megaRefind(url, name){
+  if (megaRefound.has(url) || megaBusy || !cur) return false;
+  megaRefound.add(url);
+  const root = decodeURIComponent(url.split("/")[2]);
+  Object.keys(megaRoots).forEach(k => { if (k.startsWith(root + "#")) delete megaRoots[k]; });
+  delete MEGA_RAW[root]; await kvDel("mega:" + root);
+  const ok = await megaLoad();
+  note(ok ? "MEGA no longer had the copy of " + name + " this browser had saved (it was replaced), so the app switched to the current file."
+          : "MEGA no longer has the copy of " + name + " this browser had saved, and the current file couldn't be found. Check the task's MEGA links.");
+  return ok;
+}
 /* fetch the start of a MEGA stream and check it really is video data (used when a MEGA video won't start) */
 async function megaDiag(url){
   const d = { status: 0, range: "", head: "", looksVideo: false, fail: "", broke: "", wc: null };
-  try { const r = await fetch("/mega-stream/__status", { cache: "no-store" }); if (r.ok) d.wc = await r.json(); } catch (_) {}
+  d.wc = await megaWorkerState();
+  d.swErr = d.wc && d.wc.errors ? d.wc.errors[megaKeyOf(url)] || "" : "";
+  d.gone = !!(d.wc && d.wc.gone && d.wc.gone.includes(megaKeyOf(url)));
   let r;
   try { r = await fetch(url, { headers: { Range: "bytes=0-65535" } }); } catch (e) { d.fail = "couldn't reach the streaming worker (" + String(e.message || e) + ")"; return d; }
   d.status = r.status; d.range = r.headers.get("content-range") || ""; d.len = r.headers.get("content-length") || "";
@@ -1867,6 +1890,7 @@ function megaDetails(name, url, v, d, f){
     "First bytes: " + (d.head || "none") + " (" + (d.looksVideo ? "looks like video" : "not video data") + ")",
     "Format: " + (f ? (f.cc || "?") + (f.prof ? " profile " + f.prof : "") : "unknown"),
     "Decryption: " + (d.wc ? (d.wc.fastDecrypt ? "built-in" : "megajs" + (d.wc.fastDecryptError ? " (" + d.wc.fastDecryptError + ")" : "")) : "unknown"),
+    "Worker's last error for this file: " + (d.swErr || "none") + (d.gone ? " (MEGA says the file no longer exists)" : ""),
     "Browser: " + navigator.userAgent].join("\n");
 }
 async function megaQuotaLeft(){ try { const r = await fetch("/mega-stream/__status", { cache: "no-store" }); return r.ok ? +((await r.json()).quotaLeft) || 0 : 0; } catch (_) { return 0; } }
@@ -1968,10 +1992,13 @@ async function megaLoadInner(opts){
   const link0 = parseMegaLink(sc(t.n, want[0][0]));
   if (await canStream()){
     /* stream: the players start right away and only fetch what is watched */
-    const have = new Set(t.vids.clips.map(c => c.name).concat(["gold", "gen"].map(k => t.vids[k] && t.vids[k].name)).filter(Boolean));
+    const loaded = new Map(t.vids.clips.map(c => [c.name, c.url]).concat(["gold", "gen"].filter(k => t.vids[k]).map(k => [t.vids[k].name, t.vids[k].url])));
+    const urlOf = it => "/mega-stream/" + [link0.root, link0.key, megaHandle(it.f), it.f.name].map(encodeURIComponent).join("/");
+    /* already loaded = same file (a re-uploaded video with the same name gets swapped in); videos you uploaded yourself stay */
+    const have = new Set(items.filter(it => loaded.has(it.f.name) && (loaded.get(it.f.name) === urlOf(it) || !loaded.get(it.f.name).startsWith("/mega-stream/"))).map(it => it.f.name));
     const todo = items.filter(it => !have.has(it.f.name));
     todo.forEach(it => {
-      const url = "/mega-stream/" + [link0.root, link0.key, megaHandle(it.f), it.f.name].map(encodeURIComponent).join("/");
+      const url = urlOf(it);
       if (it.k === "src") addClip(url, it.f.name, t); else setSingle(it.k, url, it.f.name, t);
     });
     const vids = todo.map(it => {

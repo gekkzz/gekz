@@ -329,6 +329,18 @@ function noteQuota(e){
   quotaUntil = Date.now() + (secs > 0 ? secs * 1000 : 10 * 60 * 1000);     /* unknown: wait 10 minutes before trying again */
   return true;
 }
+/* MEGA saying a file no longer exists (replaced or deleted): the saved folder listing is out of date, so drop it.
+   The page sees this in /mega-stream/__status and finds the task's current files again. */
+const GONE_RE = /ENOENT|\(-9\)|EACCESS|\(-11\)|EBLOCKED|\(-16\)|\b404\b|\b410\b/i;
+const lastErr = new Map(), gone = new Set();
+function noteErr(root, id, e){
+  const msg = String((e && e.message) || e);
+  lastErr.set(root + "/" + id, msg.slice(0, 300));
+  if (GONE_RE.test(msg) && !gone.has(root + "/" + id)){
+    gone.add(root + "/" + id);
+    kvDel("mega:" + root); Object.keys(roots).forEach(k => { if (k.startsWith(root + "#")) delete roots[k]; });
+  }
+}
 const quotaError = () => new Error("MEGA download limit reached: " + Math.ceil((quotaUntil - Date.now()) / 1000) + " seconds until it resets");
 
 /* ---- reuse MEGA's download address ----
@@ -393,7 +405,7 @@ function fetchRun(file, b0, b1, size, onBlock, job){
 self.addEventListener("fetch", e => {
   const u = new URL(e.request.url);
   if (u.origin !== self.location.origin) return;
-  if (u.pathname === "/mega-stream/__status") e.respondWith(new Response(JSON.stringify({ quotaLeft: Math.max(0, quotaUntil - Date.now()), fastDecrypt: wcOK, fastDecryptError: self.__wcError || null }), { headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } }));
+  if (u.pathname === "/mega-stream/__status") e.respondWith(new Response(JSON.stringify({ quotaLeft: Math.max(0, quotaUntil - Date.now()), fastDecrypt: wcOK, fastDecryptError: self.__wcError || null, errors: Object.fromEntries(lastErr), gone: [...gone] }), { headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } }));
   else if (u.pathname.startsWith("/mega-stream/")) e.respondWith(serve(e.request, u));
 });
 
@@ -410,7 +422,7 @@ async function readAhead(file, root, id, from, size){
   raBusy.add(fk);
   for (let b = i; b <= j; b++) inflight.add(ck(b));
   try { await fetchRun(file, i, j, size, (bi, bytes) => { cput(ck(bi), bytes); diskPut(ck(bi), bytes); inflight.delete(ck(bi)); }, { cancelled: false, ms: null }); }
-  catch (e) { if (!noteQuota(e)) gForget(file); }
+  catch (e) { if (!noteQuota(e)){ noteErr(root, id, e); gForget(file); } }
   finally { for (let b = i; b <= j; b++) inflight.delete(ck(b)); raBusy.delete(fk); }
 }
 
@@ -421,7 +433,7 @@ async function serve(req, u){
     const warm = u.searchParams.has("w");                                  /* a hidden preloader: no read-ahead */
     if (u.searchParams.has("q")) quotaUntil = 0;                            /* "Reload video" pressed: try MEGA again now */
     const fresh = u.searchParams.has("fresh");                              /* Reload video after an error: start this file from scratch */
-    if (fresh) await purgeFile(root, id);
+    if (fresh){ await purgeFile(root, id); lastErr.delete(root + "/" + id); gone.delete(root + "/" + id); }
     const file = await nodeFor(root, key, id, fresh);
     if (fresh && file) gForget(file);
     await diskOpen();
@@ -460,7 +472,7 @@ async function serve(req, u){
             try {
               for (let attempt = 0; next <= j; attempt++){
                 try { await fetchRun(file, next, j, size, (bi, bytes) => { cput(ck(bi), bytes); diskPut(ck(bi), bytes); inflight.delete(ck(bi)); send(bi, bytes); next = bi + 1; }, job); break; }
-                catch (e) { if (job.cancelled || noteQuota(e)) throw e; gForget(file); if (attempt >= 2) throw e; await sleep(500 * (attempt + 1)); }
+                catch (e) { if (job.cancelled || noteQuota(e)) throw e; noteErr(root, id, e); gForget(file); if (attempt >= 2 || gone.has(root + "/" + id)) throw e; await sleep(500 * (attempt + 1)); }
               }
             } finally { for (let b = i; b <= j; b++) inflight.delete(ck(b)); }
             i = j + 1;
@@ -477,6 +489,7 @@ async function serve(req, u){
       "Accept-Ranges": "bytes", "Cache-Control": "no-store" } });
   } catch (err) {
     const msg = String((err && err.message) || err);
+    try { const [r0, , i0] = u.pathname.slice("/mega-stream/".length).split("/").map(decodeURIComponent); if (!noteQuota(err)) noteErr(r0, i0, err); } catch (_) {}
     return new Response(msg, { status: noteQuota(err) ? 509 : 502, headers: { "Content-Type": "text/plain" } });
   }
 }
