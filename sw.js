@@ -10,7 +10,7 @@
    - Decryption uses the browser's built-in AES (hardware-accelerated) instead of megajs's JavaScript AES,
      checked against megajs once per file; if they ever disagree it switches back for good (see "fast decryption").
    - MEGA's download address for each file is reused for 30 minutes instead of asked for before every download.
-   - Read-ahead: after the player's request finishes, the next few MB are fetched too (see READ_AHEAD).
+   - Read-ahead: after the player's request finishes, the next 16 MB are fetched too (see READ_AHEAD).
    - MEGA's download limit is recognised: the worker stops asking MEGA until it resets and tells the page. */
 const MEGA_LIB = self.MEGA_LIB_URL || "https://cdn.jsdelivr.net/npm/megajs@1.3.10/dist/main.browser-umd.js";
 const BLOCK = 1024 * 1024;                 /* cache unit */
@@ -18,7 +18,7 @@ const CACHE_MAX = 400 * BLOCK;             /* memory used for cached video, olde
 const MAX_RESPONSE = 32 * BLOCK;           /* most sent for one request; the player asks again for more */
 const OPEN_RESPONSE = 8 * BLOCK;           /* for open-ended requests ("from here on"), so little is wasted when the player jumps */
 const DL = { maxConnections: 6, initialChunkSize: BLOCK, chunkSizeIncrement: BLOCK, maxChunkSize: 4 * BLOCK };
-const READ_AHEAD = 4;
+const READ_AHEAD = 16;                     /* blocks (1 MB each) fetched past the end of what the player asked for, ~30 s of cushion at 4 Mbps (not for the hidden preloaders) */
 /* time limits, so a dropped connection can't leave anything waiting forever (the worker outlives page reloads) */
 const STALL_MS = self.RR_STALL_MS || 25000;           /* a download that receives nothing for this long is abandoned and retried */
 const G_TIMEOUT = self.RR_G_TIMEOUT || 20000;          /* MEGA's answer with a file's download address */
@@ -409,21 +409,28 @@ self.addEventListener("fetch", e => {
   else if (u.pathname.startsWith("/mega-stream/")) e.respondWith(serve(e.request, u));
 });
 
-/* read-ahead: fetch the next few blocks after a finished player request, so continuing past where it stopped (or the
-   next moment a little further on) is already here. One at a time per file; pieces already saved are skipped. */
+/* read-ahead: fetch the next READ_AHEAD blocks after a finished player request, so continuing past where it stopped (or
+   the next moment a little further on) is already here. One at a time per file. Pieces already saved (say from an
+   earlier jump) are skipped and every gap after them is filled, up to the full READ_AHEAD. */
 const raBusy = new Set();
 async function readAhead(file, root, id, from, size){
   const fk = root + "/" + id, ck = i => fk + "/" + i, missing = i => !cache.has(ck(i)) && !diskHas(ck(i)) && !inflight.has(ck(i));
   const last = Math.min(Math.ceil(size / BLOCK) - 1, from + READ_AHEAD - 1);
   if (raBusy.has(fk) || quotaActive()) return;
-  let i = from; while (i <= last && !missing(i)) i++;
-  if (i > last) return;
-  let j = i; while (j + 1 <= last && missing(j + 1)) j++;
   raBusy.add(fk);
-  for (let b = i; b <= j; b++) inflight.add(ck(b));
-  try { await fetchRun(file, i, j, size, (bi, bytes) => { cput(ck(bi), bytes); diskPut(ck(bi), bytes); inflight.delete(ck(bi)); }, { cancelled: false, ms: null }); }
-  catch (e) { if (!noteQuota(e)){ noteErr(root, id, e); gForget(file); } }
-  finally { for (let b = i; b <= j; b++) inflight.delete(ck(b)); raBusy.delete(fk); }
+  try {
+    let i = from;
+    while (i <= last && !quotaActive()){
+      while (i <= last && !missing(i)) i++;
+      if (i > last) break;
+      let j = i; while (j + 1 <= last && missing(j + 1)) j++;
+      for (let b = i; b <= j; b++) inflight.add(ck(b));
+      try { await fetchRun(file, i, j, size, (bi, bytes) => { cput(ck(bi), bytes); diskPut(ck(bi), bytes); inflight.delete(ck(bi)); }, { cancelled: false, ms: null }); }
+      catch (e) { if (!noteQuota(e)){ noteErr(root, id, e); gForget(file); } break; }
+      finally { for (let b = i; b <= j; b++) inflight.delete(ck(b)); }
+      i = j + 1;
+    }
+  } finally { raBusy.delete(fk); }
 }
 
 async function serve(req, u){
