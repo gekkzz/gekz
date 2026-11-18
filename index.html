@@ -157,6 +157,20 @@ td.c-view{display:none}
 .compact td.c-view::before{display:none}
 .phead{display:grid;grid-template-columns:1fr auto 1fr;align-items:center}
 .phead .nact{justify-self:end}
+/* Prompt tab: the right column is the prompt box with the rubric under it */
+.pcol{position:sticky;top:12px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.pcol .side{position:static}
+.pbox{border:1px solid var(--line);border-radius:10px;background:var(--panel);overflow:hidden}
+.pbar{display:flex;align-items:center;gap:10px;padding:6px 8px 4px 14px}
+.pbar label{font-weight:600;font-size:13px;color:var(--mut)}
+.pbar .nact{margin-left:auto;display:flex;align-items:center;gap:6px}
+.pbar .btn.sq{padding:0 8px;min-width:30px;min-height:0;font-size:15px;line-height:1.5}
+.pnotes{display:block;width:100%;box-sizing:border-box;height:190px;min-height:90px;max-height:70vh;resize:vertical;border:0;border-radius:0;background:transparent;padding:4px 14px 12px;margin:0}
+.pnotes:focus{outline:none}
+.pbox:focus-within{border-color:var(--liveblue)}
+@media (max-width:960px){.pcol{position:static}}
+/* Multi-Take tab: the clip buttons sit on the same line as the notes header, so the video and the notes start level */
+#multiVid .subtabs{padding:0;border:0;margin:0 0 var(--mvgap,8px);min-height:var(--mvh,37px);align-items:center}
 .btn.o-cyan{border:2px solid #7cc4ff;padding:7px 13px}
 .btn.o-cyan:disabled{opacity:.6;cursor:progress}
 #p-prompt .stage.hastc #notesPrompt{height:calc(55vh - 120px);min-height:140px}
@@ -444,34 +458,37 @@ td.id{width:64px}
 
 <section id="p-prompt" hidden>
   <div class="split">
-    <div class="stage">
-      <div class="nhead top phead"><label for="notesPrompt">Prompt</label>
-        <button class="btn o-cyan" id="tcRun">Test Against Rubric</button>
-        <span class="nact"><button class="btn sq" id="pfsDown" aria-label="Decrease font size" title="Smaller text">&minus;</button><span class="tip" id="pfsVal" aria-live="polite">15px</span><button class="btn sq" id="pfsUp" aria-label="Increase font size" title="Larger text">+</button></span></div>
-      <textarea id="notesPrompt" class="notes solo" spellcheck="false" placeholder="The task's prompt (column C) appears here"></textarea>
-      <div id="tc" class="tc" hidden>
-        <div class="tchead"><b>Rubric check</b><span class="nact"><span class="tip" id="tcTip" aria-live="polite"></span><button class="btn" id="tcCopy" hidden>Copy results</button><button class="btn" id="tcClose" aria-label="Close results">Close</button></span></div>
-        <form id="tcPw" class="tcpw" hidden><label for="tcPwIn">Check password</label><input id="tcPwIn" type="password" autocomplete="current-password"><button class="btn o-cyan" type="submit">Run check</button></form>
-        <div id="tcBody" class="tcbody" aria-live="polite"></div>
+    <div class="stage" id="promptVid"><div id="goldStage"></div>
+      <div class="empty" id="goldEmpty">No golden edit for this task yet. Use Load videos from MEGA, or Upload Golden Edit.</div></div>
+    <div class="pcol">
+      <div class="stage pstage">
+        <div class="pbox">
+          <div class="pbar"><label for="notesPrompt">Prompt</label>
+            <button class="btn o-cyan" id="tcRun">Test Against Rubric</button>
+            <span class="nact"><button class="btn sq" id="pfsDown" aria-label="Decrease font size" title="Smaller text">&minus;</button><span class="tip" id="pfsVal" aria-live="polite">15px</span><button class="btn sq" id="pfsUp" aria-label="Increase font size" title="Larger text">+</button></span></div>
+          <textarea id="notesPrompt" class="notes pnotes" spellcheck="false" placeholder="The task's prompt (column C) appears here"></textarea>
+        </div>
+        <div id="tc" class="tc" hidden>
+          <div class="tchead"><b>Rubric check</b><span class="nact"><span class="tip" id="tcTip" aria-live="polite"></span><button class="btn" id="tcCopy" hidden>Copy results</button><button class="btn" id="tcClose" aria-label="Close results">Close</button></span></div>
+          <form id="tcPw" class="tcpw" hidden><label for="tcPwIn">Check password</label><input id="tcPwIn" type="password" autocomplete="current-password"><button class="btn o-cyan" type="submit">Run check</button></form>
+          <div id="tcBody" class="tcbody" aria-live="polite"></div>
+        </div>
       </div>
+      <div class="side" id="slotPrompt"></div>
     </div>
-    <div class="side" id="slotPrompt"></div>
   </div>
 </section>
 
 <section id="p-src" hidden>
-  <div class="subtabs" id="clipTabs" role="tablist" aria-label="Source clips"></div>
   <div class="split">
-    <div class="stage"><div id="clipStage"></div>
-    <div class="empty" id="srcEmpty">No source clips for this task yet. Use Load videos from MEGA, or Upload Source Clips.</div></div>
+    <div class="stage"></div>
     <div class="side" id="slotSrc"></div>
   </div>
 </section>
 
 <section id="p-gold" hidden>
   <div class="split">
-    <div class="stage"><div id="goldStage"></div>
-    <div class="empty" id="goldEmpty">No golden edit for this task yet. Use Load videos from MEGA, or Upload Golden Edit.</div></div>
+    <div class="stage"></div>
     <div class="side" id="slotGold"></div>
   </div>
 </section>
@@ -494,12 +511,15 @@ td.id{width:64px}
 
 <section id="p-multi" hidden>
   <div class="split">
+    <div class="stage" id="multiVid">
+      <div class="subtabs" id="clipTabs" role="tablist" aria-label="Source clips"></div>
+      <div id="clipStage"></div>
+      <div class="empty" id="srcEmpty">No source clips for this task yet. Use Load videos from MEGA, or Upload Source Clips.</div></div>
     <div class="stage">
       <div class="nhead top"><label for="notesMulti">Multi-Take Moments</label>
         <span class="nact"><span class="tip" id="mtip" aria-live="polite"></span><button class="btn" id="mcopy">Copy to clipboard</button></span></div>
       <textarea id="notesMulti" class="notes solo" spellcheck="false" placeholder="The task's multi-take moments (column G) appear here"></textarea>
     </div>
-    <div class="side" id="slotMulti"></div>
   </div>
 </section>
 
@@ -953,7 +973,7 @@ document.querySelectorAll("label.btn").forEach(l => l.addEventListener("keydown"
 const panes = { rubric: $("p-rubric"), prompt: $("p-prompt"), src: $("p-src"), gold: $("p-gold"), gen: $("p-gen"), multi: $("p-multi"), verdicts: $("p-verdicts"), sbs: $("p-sbs") };
 let curTab = "rubric";
 const rubricBox = $("rubricBox");
-const slots = { rubric: $("p-rubric"), prompt: $("slotPrompt"), src: $("slotSrc"), gold: $("slotGold"), gen: $("slotGen"), multi: $("slotMulti"), verdicts: $("rubricPark"), sbs: $("rubricPark") };   /* Verdicts has no rubric beside it */
+const slots = { rubric: $("p-rubric"), prompt: $("slotPrompt"), src: $("slotSrc"), gold: $("slotGold"), gen: $("slotGen"), multi: $("rubricPark"), verdicts: $("rubricPark"), sbs: $("rubricPark") };   /* Multi-Take and Verdicts have no rubric beside them */
 /* keep the rubric at the same row when switching tabs (see the live app for the reasoning) */
 const winMode = t => t === "rubric" || window.innerWidth <= 960;
 const rowEls = () => [...document.querySelectorAll("#body tr")];
@@ -1537,6 +1557,8 @@ function viewSpec(spec, avoid = -1){
     return;
   }
   note("");
+  /* on the Multi-Take tab the clips are right there on the left: play it in place */
+  if (curTab === "multi"){ V().active = c; renderClips(); c.player.seekTo(p.sec, true, p.end); return; }
   /* clips open in Side by Side: in the half that isn't showing the rubric (or the one already on Source Clips) */
   if (curTab !== "sbs") showTab("sbs");
   const r = sbsOwner("rubric"), s0 = sbsOwner("src");
@@ -2446,7 +2468,7 @@ window.addEventListener("resize", queueLiveBars);
 /* ---------- fit the boxes to the screen (every tab but Rubric): each box ends at the bottom of the window and
    scrolls inside itself, so the page doesn't scroll. Only a box made taller by hand (the video edge, a notes
    box's corner) can make the page longer. ---------- */
-var FIT_SEL = ".side, .sbsbody.rub, .sbsbody.flg, .notes";   /* var: may be used by code that runs before this line */
+var FIT_SEL = ".side, .sbsbody.rub, .sbsbody.flg, .notes.solo";   /* var: may be used by code that runs before this line */
 function fitPanes(){
   if (!FIT_SEL) return;
   const narrow = window.innerWidth <= 960, all = [...document.querySelectorAll(FIT_SEL)];
@@ -2459,7 +2481,7 @@ function fitPanes(){
   });
 }
 window.addEventListener("resize", () => { clearTimeout(fitPanes._t); fitPanes._t = setTimeout(() => { autoVidH(); fitPanes(); }, 120); });
-if (window.ResizeObserver){ const ro = new ResizeObserver(() => { autoVidH(); fitPanes(); }); ro.observe(document.querySelector("header")); ro.observe($("taskbar")); }
+if (window.ResizeObserver){ const ro = new ResizeObserver(() => { autoVidH(); fitPanes(); }); ro.observe(document.querySelector("header")); ro.observe($("taskbar")); ro.observe($("notesPrompt")); }   /* dragging the prompt box's height refits the rubric under it */
 
 /* ---------- clickable timestamps in Multi-Take Moments, Went Well and Went Wrong ----------
    The notes show as text with links: "out 4.00-6.20s" style times open the generated video at that moment,
