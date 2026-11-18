@@ -100,10 +100,14 @@ body.vresizing{cursor:ns-resize;user-select:none}
 .seek{flex:1 1 auto;min-width:60px;width:0}
 .vol{width:90px;flex:0 1 90px;min-width:50px}
 .ctl > *:not(.seek):not(.vol){flex-shrink:0}
-/* narrow players (e.g. a Side by Side half on a smaller screen): the seek bar gets its own full-width row on top */
+/* narrow players (Triple View columns, a Double View half on a smaller screen): the controls stay on one line.
+   The seek bar shrinks first, then the buttons, time and speed get smaller; very narrow ones drop the volume slider
+   and then the total-duration text. One line of controls leaves more height for the video (see autoVidH). */
 .player{container-type:inline-size}
-@container (max-width:700px){.ctl{flex-wrap:wrap;row-gap:6px}.ctl .seek{order:-1;flex:1 1 100%;width:auto;min-width:0}.ctl .pp{margin-right:auto}}
-@container (max-width:520px){.ctl .vol{display:none}.ctl{gap:6px}}   /* very narrow: the mute button stays, the volume slider goes */
+@container (max-width:700px){.ctl{gap:6px;padding:8px 10px}.ctl button{width:30px;height:30px}.ctl svg{width:18px;height:18px}
+  .ctl .ts{padding:0 7px;font-size:12.5px;height:30px}.dur{font-size:11.5px}.ctl .spd{min-width:36px;font-size:12px}.seek{min-width:40px}.vol{flex-basis:60px;width:60px;min-width:40px}}
+@container (max-width:520px){.ctl .vol{display:none}.ctl{gap:4px;padding:7px 8px}.ctl button{width:27px;height:28px}.ctl .ts{padding:0 5px;font-size:12px;height:28px}.ctl .spd{min-width:30px}}
+@container (max-width:430px){.dur{display:none}}
 input[type=range]{accent-color:#8ab4f8}
 .seektip{position:fixed;z-index:50;pointer-events:none;transform:translate(-50%,-100%);background:#000;color:#fff;border:1px solid #444;padding:3px 8px;border-radius:6px;font:600 12px/1.3 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-variant-numeric:tabular-nums}
 
@@ -208,6 +212,10 @@ tr.flashrow{outline:2px solid #7cc4ff;outline-offset:-2px}
 @container (max-width:900px){.sbsbar{gap:6px}.sbsbar .subbtn{padding:6px 9px;font-size:13.5px}.sbsbar .bfsb{width:24px}.sbsbar .bfsval{min-width:34px}}
 @container (max-width:760px){.sbsbar{gap:5px}.sbsbar .subbtn{padding:5px 7px;font-size:12.5px}.sbsbar .bfsval{min-width:30px;font-size:11.5px}}
 .sbsbar .sub.back{border-style:dashed}
+/* narrow columns: shorter shortcut hints so they stay on one line */
+@container (max-width:720px){.keys{font-size:11px;gap:2px 10px}.keys kbd{padding:0 3px}.keys > span:nth-child(4){display:none}}
+@container (max-width:520px){.keys{gap:2px 8px}.keys .kl{display:none}}
+@container (max-width:420px){.keys{font-size:11px;gap:2px 8px}.keys > span:nth-child(3){display:none}}   /* very narrow: Space - Play/Pause goes too */   /* "Hold A or D to scrub" goes: A and D are already listed */
 .sbsbody{min-width:0}
 .sbsbody.flg{overflow:auto;border:1px solid var(--line);border-radius:10px;background:var(--panel)}
 .sbsbody.rub{position:sticky;top:12px;max-height:calc(100vh - 24px);overflow:auto;border:1px solid var(--line);border-radius:10px;background:var(--panel)}
@@ -216,6 +224,9 @@ tr.flashrow{outline:2px solid #7cc4ff;outline-offset:-2px}
 .sbsnote .megaload{margin:14px 0 8px}
 .sbsnote .sbsalt{font-size:12.5px;opacity:.8}
 @media (max-width:960px){.sbs{grid-template-columns:minmax(0,1fr)}}
+/* Triple View: golden edit / generated video | source clips | rubric, Went Wrong, Flags */
+.sbs.tri{grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,1.3fr);gap:16px}
+@media (max-width:960px){.sbs.tri{grid-template-columns:minmax(0,1fr)}}
 .vhost:not([hidden]){display:flex;flex-direction:column}
 .vhost .vname{display:none}   /* file name under the player hidden */
 .sbsbar .sub.szc{margin-left:auto}
@@ -397,7 +408,8 @@ td.id{width:64px}
     <button class="tab" role="tab" aria-selected="false" data-tab="prompt">Prompt</button>
         <button class="tab" role="tab" aria-selected="false" data-tab="multi">Multi-Take Moments</button>
     <button class="tab" role="tab" aria-selected="false" data-tab="verdicts">Verdicts</button>
-    <button class="tab" role="tab" aria-selected="false" data-tab="sbs">Side by Side</button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="sbs">Double View</button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="tri">Triple View</button>
   </nav>
   <div class="bar">
     <div class="barrow">
@@ -507,6 +519,14 @@ td.id{width:64px}
     <div class="sbshalf" data-h="1"><div class="sbsbar" id="sbsBar1" role="tablist" aria-label="Right side"></div><div class="sbsbody" id="sbsBody1"><div class="sbsnote" hidden></div></div></div>
   </div>
   <div id="rubricPark" hidden></div>
+</section>
+
+<section id="p-tri" hidden>
+  <div class="sbs tri">
+    <div class="sbshalf" data-h="0"><div class="sbsbar" id="triBar0" role="tablist" aria-label="Golden edit and generated video"></div><div class="sbsbody" id="triBody0"><div class="sbsnote" hidden></div></div></div>
+    <div class="sbshalf" data-h="1"><div class="sbsbar" id="triBar1" role="tablist" aria-label="Source clips"></div><div class="sbsbody" id="triBody1"><div class="sbsnote" hidden></div></div></div>
+    <div class="sbshalf" data-h="2"><div class="sbsbar" id="triBar2" role="tablist" aria-label="Rubric, Went Wrong and Flags"></div><div class="sbsbody" id="triBody2"><div class="sbsnote" hidden></div></div></div>
+  </div>
 </section>
 
 <section id="p-multi" hidden>
@@ -970,10 +990,10 @@ document.querySelectorAll("label.btn").forEach(l => l.addEventListener("keydown"
 }));
 
 /* ---------- tabs ---------- */
-const panes = { rubric: $("p-rubric"), prompt: $("p-prompt"), src: $("p-src"), gold: $("p-gold"), gen: $("p-gen"), multi: $("p-multi"), verdicts: $("p-verdicts"), sbs: $("p-sbs") };
+const panes = { rubric: $("p-rubric"), prompt: $("p-prompt"), src: $("p-src"), gold: $("p-gold"), gen: $("p-gen"), multi: $("p-multi"), verdicts: $("p-verdicts"), sbs: $("p-sbs"), tri: $("p-tri") };
 let curTab = "rubric";
 const rubricBox = $("rubricBox");
-const slots = { rubric: $("p-rubric"), prompt: $("slotPrompt"), src: $("slotSrc"), gold: $("slotGold"), gen: $("slotGen"), multi: $("rubricPark"), verdicts: $("rubricPark"), sbs: $("rubricPark") };   /* Multi-Take and Verdicts have no rubric beside them */
+const slots = { rubric: $("p-rubric"), prompt: $("slotPrompt"), src: $("slotSrc"), gold: $("slotGold"), gen: $("slotGen"), multi: $("rubricPark"), verdicts: $("rubricPark"), sbs: $("rubricPark"), tri: $("rubricPark") };   /* Multi-Take and Verdicts have no rubric beside them */
 /* keep the rubric at the same row when switching tabs (see the live app for the reasoning) */
 const winMode = t => t === "rubric" || window.innerWidth <= 960;
 const rowEls = () => [...document.querySelectorAll("#body tr")];
@@ -1012,7 +1032,7 @@ function showTab(t){
   Object.keys(panes).forEach(k => { panes[k].hidden = k !== t; });
   players.forEach(p => p.pause());
   rubricBox.classList.toggle("compact", t !== "rubric");
-  if (t === "sbs") sbsRender(pos);
+  if (isView(t)){ useView(t); sbsRender(pos); }
   else {
     placeVids();
     slots[t].appendChild(rubricBox);
@@ -1098,7 +1118,7 @@ function makePlayer(host, url, name, copyPrefix = ""){
       <button class="mute" aria-label="Mute"></button>
       <input class="vol" type="range" min="0" max="1" step="0.01" aria-label="Volume">
     </div></div><div class="vgrip" role="separator" aria-orientation="horizontal" aria-label="Drag to resize the video" title="Drag to resize · double-click to reset"></div>
-    <div class="keys" aria-label="Keyboard shortcuts"><span><kbd>A</kbd> - Rewind 5s</span><span><kbd>D</kbd> - Forward 5s</span><span><kbd>Space</kbd> - Play/Pause</span><span>Hold A or D to scrub</span><span><kbd>E</kbd> / <kbd>R</kbd> - Replay / next timestamp</span></div>`;
+    <div class="keys" aria-label="Keyboard shortcuts"><span><kbd>A</kbd> - Rewind 5s</span><span><kbd>D</kbd> - Forward 5s</span><span><kbd>Space</kbd> - Play/Pause</span><span>Hold A or D to scrub</span><span><kbd>E</kbd> / <kbd>R</kbd> - Replay / next<span class="kl"> timestamp</span></span></div>`;
   const q = c => host.querySelector(c);
   q(".vgrip").addEventListener("pointerdown", e => startVidResize(e, q("video")));
   q(".vgrip").addEventListener("dblclick", () => setVidH(null));
@@ -1268,7 +1288,7 @@ const stem = n => n.replace(/\.[^.]+$/, "");
 const V = () => (cur || NOTASK).vids;
 const STAGE = { gold: "goldStage", gen: "genStage" }, EMPTY = { gold: "goldEmpty", gen: "genEmpty" };
 function updBuffering(){
-  const on = curTab === "sbs" ? sbsPlayers() : [activePlayer()];
+  const on = isView(curTab) ? sbsPlayers() : [activePlayer()];
   players.forEach(p => p.setBuffer(on.includes(p)));
 }
 function hideVids(t){
@@ -1370,9 +1390,9 @@ function flagToggle(t, f){
    in the other half stays in view, with the cursor in that flag's reason box */
 function flagOpen(k, fromEl){
   const inRub = !!fromEl.closest("#rubricBox"), inBad = !!fromEl.closest("#badStage");
-  if (curTab !== "sbs") showTab("sbs");
+  if (!isView(curTab)) showTab("sbs");
   const here = inRub ? sbsOwner("rubric") : inBad ? sbsOwner("bad") : -1;
-  const target = here >= 0 ? here : sbsOwner("flags") >= 0 ? sbsOwner("flags") : 1;
+  const target = curTab === "tri" ? 2 : here >= 0 ? here : sbsOwner("flags") >= 0 ? sbsOwner("flags") : 1;
   if (sbsOwner("flags") !== target) sbsPick(target, "flags"); else renderFlags();
   const card = [...$("flagsStage").querySelectorAll(".fcard")].find(c => c.dataset.k === k); if (!card) return;
   const box = sbsBody(target), ta = card.querySelector(".fwhy");
@@ -1418,7 +1438,7 @@ function flagsRefresh(){
   /* Went Wrong line buttons */
   const ta = $("notesBad"); if (ta.hidden) renderNoteView(ta);
   /* tab label + panel */
-  if (curTab === "sbs") [0, 1].forEach(h => { const b = $("sbsBar" + h).querySelector('button[data-sel="flags"]'); if (b){ const n = flagsOf(cur).length; b.textContent = "Flags" + (n ? " (" + n + ")" : ""); } });
+  if (isView(curTab)) HS().forEach(h => { const b = sbsBarEl(h).querySelector('button[data-sel="flags"]'); if (b){ const n = flagsOf(cur).length; b.textContent = "Flags" + (n ? " (" + n + ")" : ""); } });
   renderFlags();
 }
 function renderFlags(){
@@ -1456,7 +1476,7 @@ $("flagsStage").addEventListener("click", e => {
    Follows the rubric top to bottom, left to right within a row (like the preloaders), skipping rows the filter hides.
    While Went Wrong is on screen (Side by Side half or Verdicts), it goes through Went Wrong's generated-video
    moments ("4.00-6.20s") instead. Clicking a timestamp yourself moves the position there, so R carries on from it. */
-const wwShown = () => curTab === "verdicts" || (curTab === "sbs" && sbsOwner("bad") >= 0);
+const wwShown = () => curTab === "verdicts" || (isView(curTab) && sbsOwner("bad") >= 0);
 function tsItems(mode){
   if (!cur) return [];
   if (mode === "ww"){
@@ -1510,7 +1530,7 @@ function tsStep(dir){
 /* ---------- keyboard ---------- */
 const SKIP = 5, HOLD_DELAY = 350, HOLD_EVERY = 200;
 const KEYDIR = { a: -1, arrowleft: -1, d: 1, arrowright: 1 };
-const activePlayer = () => { const v = V(); return curTab === "src" ? (v.active && v.active.player) : (curTab === "gold" || curTab === "gen") ? (v[curTab] && v[curTab].player) : curTab === "sbs" ? sbsFocusPlayer() : null; };
+const activePlayer = () => { const v = V(); return curTab === "src" ? (v.active && v.active.player) : (curTab === "gold" || curTab === "gen") ? (v[curTab] && v[curTab].player) : isView(curTab) ? sbsFocusPlayer() : null; };
 const typing = el => !!el && (/^(TEXTAREA|SELECT)$/.test(el.tagName) || el.isContentEditable ||
   (el.tagName === "INPUT" && !el.classList.contains("seek")));
 let hold = null;
@@ -1559,6 +1579,8 @@ function viewSpec(spec, avoid = -1){
   note("");
   /* on the Multi-Take tab the clips are right there on the left: play it in place */
   if (curTab === "multi"){ V().active = c; renderClips(); c.player.seekTo(p.sec, true, p.end); return; }
+  /* Triple View: the middle column */
+  if (curTab === "tri"){ V().active = c; if (sbsOwner("src") !== 1) sbsPick(1, "src", true); renderClips(); c.player.seekTo(p.sec, true, p.end); return; }
   /* clips open in Side by Side: in the half that isn't showing the rubric (or the one already on Source Clips) */
   if (curTab !== "sbs") showTab("sbs");
   const r = sbsOwner("rubric"), s0 = sbsOwner("src");
@@ -1844,7 +1866,7 @@ function setMegaBtn(){
   b.title = st === "ready" ? "This task's videos are loaded" : st === "loading" ? "Loading this task's videos from MEGA" : "Load this task's videos from the MEGA links in the sheet";
   /* the same button inside empty Side by Side halves */
   document.querySelectorAll(".sbsnote .megaload").forEach(x => { x.textContent = MEGA_LABEL[st]; x.disabled = st !== "idle"; });
-  if (st !== "loading" && curTab === "sbs" && document.querySelector(".sbsnote .megaload")) sbsRender();
+  if (st !== "loading" && isView(curTab) && document.querySelector(".sbsnote .megaload")) sbsRender();
 }
 /* loads the current task's videos; resolves true when they're ready to play */
 async function megaLoad(opts = {}){
@@ -2187,12 +2209,25 @@ const SBS_STORE = "rr-sbs-layout-v2";
 let halves = [{ sel: "gen", mode: "main", at: 1 }, { sel: "rubric", mode: "main", at: 2 }];   /* first visit: generated left, rubric right */
 try { const j = JSON.parse(localStorage.getItem(SBS_STORE) || "null");
   if (Array.isArray(j) && j.length === 2 && j.every(h => SBS_ITEMS.some(x => x[0] === h.sel))) halves = j.map((h, i) => ({ sel: h.sel, mode: h.sel === "src" && h.mode === "clips" ? "clips" : "main", at: +h.at || i + 1 })); } catch (_) {}
+/* Triple View: three columns with fixed contents (golden edit / generated video, source clips, rubric / Went Wrong / Flags).
+   It shares all of Double View's code: `halves` points at whichever layout is on screen. */
+const TRI_ITEMS = [["gold", "gen"], ["src"], ["rubric", "bad", "flags"]];
+const TRI_STORE = "rr-tri-layout";
+const sbsHalves = halves;
+let triHalves = [{ sel: "gold", mode: "main", at: 1 }, { sel: "src", mode: "clips", at: 2 }, { sel: "rubric", mode: "main", at: 3 }];
+try { const j = JSON.parse(localStorage.getItem(TRI_STORE) || "null");
+  if (Array.isArray(j) && j.length === 3 && j.every((h, i) => TRI_ITEMS[i].includes(h.sel))) triHalves = j.map((h, i) => ({ sel: h.sel, mode: i === 1 ? "clips" : "main", at: +h.at || i + 1 })); } catch (_) {}
+const isView = t => t === "sbs" || t === "tri";
+let viewKey = "sbs";
+function useView(k){ viewKey = k; halves = k === "tri" ? triHalves : sbsHalves; }
+const HS = () => halves.map((_, i) => i);
 let sbsFocus = 0, sbsClock = 3;
-const sbsBody = h => $("sbsBody" + h);
-/* if both halves pick the same thing, the half that picked it last shows it */
+const sbsBody = h => $(viewKey + "Body" + h);
+const sbsBarEl = h => $(viewKey + "Bar" + h);
+/* if two halves pick the same thing (Double View), the one that picked it last shows it */
 function sbsOwner(sel){
-  const hs = [0, 1].filter(h => halves[h].sel === sel);
-  return !hs.length ? -1 : hs.length === 1 ? hs[0] : (halves[0].at >= halves[1].at ? 0 : 1);
+  let best = -1; HS().forEach(h => { if (halves[h].sel === sel && (best < 0 || halves[h].at > halves[best].at)) best = h; });
+  return best;
 }
 const hostOf = (v, sel) => sel === "src" ? (v.active && v.active.host) : sel === "gold" || sel === "gen" ? (v[sel] && v[sel].host) : null;
 const playerOf = (v, sel) => sel === "src" ? (v.active && v.active.player) : sel === "gold" || sel === "gen" ? (v[sel] && v[sel].player) : null;
@@ -2204,15 +2239,15 @@ function sendHome(v){
   v.clips.forEach(c => moveTo(c.host, $("clipStage")));
   ["gold", "gen"].forEach(k => { if (v[k]) moveTo(v[k].host, $(STAGE[k])); });
 }
-function placeVids(){ if (curTab === "sbs") sbsRender(); else sendHome(V()); }
+function placeVids(){ if (isView(curTab)) sbsRender(); else sendHome(V()); }
 function sbsPlayers(){
   const v = V(), out = [];
-  [0, 1].forEach(h => { const s = halves[h].sel; if (s !== "rubric" && sbsOwner(s) === h){ const p = playerOf(v, s); if (p) out.push(p); } });
+  HS().forEach(h => { const s = halves[h].sel; if (s !== "rubric" && sbsOwner(s) === h){ const p = playerOf(v, s); if (p) out.push(p); } });
   return out;
 }
 function sbsFocusPlayer(){
   const v = V(), pick = h => { const s = halves[h].sel; return s !== "rubric" && sbsOwner(s) === h ? playerOf(v, s) : null; };
-  return pick(sbsFocus) || pick(1 - sbsFocus);
+  return pick(sbsFocus) || HS().map(pick).find(Boolean) || null;
 }
 function sbsBar(h){
   const v = V(), half = halves[h], btn = (cls, attrs, label, on) =>
@@ -2220,9 +2255,10 @@ function sbsBar(h){
   if (half.mode === "clips")
     return btn("", 'data-sel="src"', "Source Clips", true)
       + v.clips.map((c, i) => btn("", `data-clip="${i}" title="${escA(c.name)}"`, stem(c.name), c === v.active)).join("")
-      + btn(" back", 'data-back="1"', "Back", false);
+      + (viewKey === "tri" ? "" : btn(" back", 'data-back="1"', "Back", false));   /* Triple View's middle column is always the clips */
   const nf = cur ? flagsOf(cur).length : 0;
-  return SBS_ITEMS.map(([k, label]) => btn("", `data-sel="${k}"`, k === "src" && v.clips.length ? label + " (" + v.clips.length + ")" : k === "flags" && nf ? label + " (" + nf + ")" : label, half.sel === k)).join("")
+  const items = viewKey === "tri" ? SBS_ITEMS.filter(([k]) => TRI_ITEMS[h].includes(k)) : SBS_ITEMS;
+  return items.map(([k, label]) => btn("", `data-sel="${k}"`, k === "src" && v.clips.length ? label + " (" + v.clips.length + ")" : k === "flags" && nf ? label + " (" + nf + ")" : label, half.sel === k)).join("")
     + ((half.sel === "gold" || half.sel === "gen") && v[half.sel] && sbsOwner(half.sel) === h
        ? btn(" szc", 'data-sz="1" title="Outline the Instagram Reels safe zone on the video"', "Safe Zone Checker", safeZone) : "")
     + (half.sel === "bad" && sbsOwner("bad") === h
@@ -2268,15 +2304,15 @@ function szApply(){
   ["gold", "gen"].forEach(k => { if (v[k]) szOverlay(v[k].host); });
 }
 function sbsRender(pos){
-  if (curTab !== "sbs"){ sendHome(V()); return; }
+  if (!isView(curTab)){ sendHome(V()); return; }
   if (pos === undefined) pos = readPos();
   const v = V();
   /* what each half shows */
   const want = new Map();     /* element -> half */
   let rubricHalf = -1, badHalf = -1, flagsHalf = -1;
-  [0, 1].forEach(h => {
+  HS().forEach(h => {
     const s = halves[h].sel, body = sbsBody(h), noteEl = body.querySelector(".sbsnote");
-    $("sbsBar" + h).innerHTML = sbsBar(h);
+    sbsBarEl(h).innerHTML = sbsBar(h);
     body.classList.toggle("rub", s === "rubric" && sbsOwner(s) === h);
     body.classList.toggle("flg", s === "flags" && sbsOwner(s) === h);
     let msg = "";
@@ -2300,7 +2336,7 @@ function sbsRender(pos){
   else badHome();
   if (flagsHalf >= 0){ moveTo($("flagsStage"), sbsBody(flagsHalf), sbsBody(flagsHalf).querySelector(".sbsnote")); renderFlags(); }
   else moveTo($("flagsStage"), $("flagsHome"));
-  slots.sbs = rubricHalf >= 0 ? sbsBody(rubricHalf) : $("rubricPark");
+  slots[viewKey] = rubricHalf >= 0 ? sbsBody(rubricHalf) : $("rubricPark");
   autoVidH();
   szApply();
   fitPanes();
@@ -2311,18 +2347,18 @@ function sbsRender(pos){
   players.forEach(p => { if (p.playing() && !vis.includes(p)) p.pause(); });
   liveUpdate();
 }
-function sbsSave(){ try { localStorage.setItem(SBS_STORE, JSON.stringify(halves)); } catch (_) {} }
+function sbsSave(){ try { localStorage.setItem(viewKey === "tri" ? TRI_STORE : SBS_STORE, JSON.stringify(halves)); } catch (_) {} }
 function sbsPick(h, sel, clips){
   const pos = readPos();
   const was = halves[h].sel, wasOwner = sbsOwner(sel) === h;
   halves[h].sel = sel; if (!(was === sel && wasOwner)) halves[h].at = ++sbsClock;
-  halves[h].mode = sel === "src" && clips ? "clips" : "main";
+  halves[h].mode = sel === "src" && (clips || viewKey === "tri") ? "clips" : "main";
   sbsFocus = h;
   sbsSave(); sbsRender(pos);   /* sbsRender pauses only the videos that leave the screen */
 }
-[0, 1].forEach(h => {
-  $("sbsBar" + h).addEventListener("mousedown", e => { if (e.target.closest("[data-editbad]")) e.preventDefault(); });   /* keep the text focused so Done can close it */
-  $("sbsBar" + h).addEventListener("click", e => {
+[["sbs", 0], ["sbs", 1], ["tri", 0], ["tri", 1], ["tri", 2]].forEach(([vk, h]) => {
+  $(vk + "Bar" + h).addEventListener("mousedown", e => { if (e.target.closest("[data-editbad]")) e.preventDefault(); });   /* keep the text focused so Done can close it */
+  $(vk + "Bar" + h).addEventListener("click", e => {
     const b = e.target.closest("button"); if (!b) return;
     if (b.dataset.bfs){ setBFS(bfs + (+b.dataset.bfs) * BFS_STEP); return; }
     if (b.dataset.editbad){ editBadToggle(); return; }
@@ -2529,7 +2565,7 @@ function caretOffset(view, x, y){
   if (!node || !view.contains(node)) return null;
   try { const r = document.createRange(); r.setStart(view, 0); r.setEnd(node, off); return r.toString().length; } catch (_) { return null; }
 }
-const halfOf = el => { const h = el.closest(".sbshalf"); return h && curTab === "sbs" ? +h.dataset.h : -1; };
+const halfOf = el => { const h = el.closest(".sbshalf"); return h && isView(curTab) ? +h.dataset.h : -1; };
 function viewGen(sec, avoid = -1, end = null){
   const g = V().gen;
   if (!g){
@@ -2537,6 +2573,7 @@ function viewGen(sec, avoid = -1, end = null){
     flash("This task has no generated video yet. Load it from MEGA or upload it, then try again."); return;
   }
   note("");
+  if (curTab === "tri"){ if (sbsOwner("gen") !== 0) sbsPick(0, "gen"); g.player.seekTo(sec, true, end); return; }   /* Triple View: the left column */
   if (curTab !== "sbs") showTab("sbs");
   const o = sbsOwner("gen"), r = sbsOwner("rubric");
   const h = avoid >= 0 ? 1 - avoid : o >= 0 ? o : r >= 0 ? 1 - r : 0;
@@ -2566,7 +2603,8 @@ function viewRow(id, avoid = -1){
   const n = cur.rows.findIndex(r => (r.id || "").trim().toUpperCase() === id.toUpperCase());
   if (n < 0){ flash("This task's rubric has no row " + id + "."); return; }
   note("");
-  if (curTab === "sbs" || !rubricShown()){
+  if (curTab === "tri"){ if (sbsOwner("rubric") !== 2) sbsPick(2, "rubric"); }   /* Triple View: the right column */
+  else if (curTab === "sbs" || !rubricShown()){
     if (curTab !== "sbs") showTab("sbs");
     const r = sbsOwner("rubric");
     const h = avoid >= 0 ? 1 - avoid : r >= 0 ? r : sbsOwner("bad") >= 0 ? 1 - sbsOwner("bad") : 1;
