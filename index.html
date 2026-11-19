@@ -209,8 +209,8 @@ tr.flashrow{outline:2px solid #7cc4ff;outline-offset:-2px}
 .sbsbar{display:flex;gap:8px;flex-wrap:wrap;padding:0 0 12px}
 /* narrower halves: tighter buttons so each half's row stays on one line and the boxes below line up */
 .sbshalf{container-type:inline-size}
-@container (max-width:900px){.sbsbar{gap:6px}.sbsbar .subbtn{padding:6px 9px;font-size:13.5px}.sbsbar .bfsb{width:24px}.sbsbar .bfsval{min-width:34px}}
-@container (max-width:760px){.sbsbar{gap:5px}.sbsbar .subbtn{padding:5px 7px;font-size:12.5px}.sbsbar .bfsval{min-width:30px;font-size:11.5px}}
+@container (max-width:900px){.sbsbar{gap:6px;--bh:32px}.sbsbar .subbtn{padding:6px 9px;font-size:13.5px}.sbsbar .bfsb{width:24px}.sbsbar .bfsval{min-width:34px}}
+@container (max-width:760px){.sbsbar{gap:5px;--bh:29px}.sbsbar .subbtn{padding:5px 7px;font-size:12.5px}.sbsbar .bfsval{min-width:30px;font-size:11.5px}}
 .sbsbar .sub.back{border-style:dashed}
 /* narrow columns: shorter shortcut hints so they stay on one line */
 @container (max-width:720px){.keys{font-size:11px;gap:2px 10px}.keys kbd{padding:0 3px}.keys > span:nth-child(4){display:none}}
@@ -224,9 +224,27 @@ tr.flashrow{outline:2px solid #7cc4ff;outline-offset:-2px}
 .sbsnote .megaload{margin:14px 0 8px}
 .sbsnote .sbsalt{font-size:12.5px;opacity:.8}
 @media (max-width:960px){.sbs{grid-template-columns:minmax(0,1fr)}}
-/* Triple View: golden edit / generated video | source clips | rubric, Went Wrong, Flags */
-.sbs.tri{grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,1.3fr);gap:16px}
+/* every tab bar in Double / Triple View is one line of the same fixed height: a bar that doesn't fit (many source
+   clips, a narrow column) scrolls sideways in that height, so the videos and boxes below always start level */
+.sbs .sbsbar{flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;height:46px;box-sizing:border-box;padding:0;align-items:flex-start;
+  scrollbar-width:thin;scrollbar-color:#6a645a transparent}
+.sbs .sbsbar{--bh:33px}                                                     /* one height for everything in a bar, so it all lines up */
+.sbs .sbsbar > *{flex-shrink:0;align-self:flex-start;height:var(--bh);box-sizing:border-box}
+.sbs .sbsbar .bfsb{height:100%}
+.sbs .sbsbar .sbstip{display:inline-flex;align-items:center}
+.sbs .sbsbar > .bfsgrp,.sbs .sbsbar > .sbstip{align-self:flex-start}
+.sbsbar.clipbar > .sub:first-child{position:sticky;left:0;z-index:1;background:var(--bg);box-shadow:6px 0 6px -2px var(--bg)}   /* "Source Clips" stays put while the clips scroll */
+/* Triple View: golden edit / generated video | source clips | rubric, Went Wrong, Flags (the first two can swap) */
+.sbs.tri{grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,1.3fr);gap:16px;position:relative}
 @media (max-width:960px){.sbs.tri{grid-template-columns:minmax(0,1fr)}}
+.sbs.tri .sbsbar{gap:8px;--bh:33px}
+.sbs.tri .sbsbar .subbtn{padding:6px 12px;font-size:14px}                   /* the usual button size in every column */
+.sbs.tri .sbsbar .bfsb{width:28px}.sbs.tri .sbsbar .bfsval{min-width:38px;font-size:12px}
+.triswap{all:unset;position:absolute;z-index:3;width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;
+  background:var(--panel);border:1px solid var(--line);color:var(--mut);opacity:.55;transition:opacity .15s,color .15s}
+.triswap:hover,.triswap:focus-visible{opacity:1;color:var(--fg);border-color:#9f9f9f}
+.triswap svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+@media (max-width:960px){.triswap{display:none}}
 .vhost:not([hidden]){display:flex;flex-direction:column}
 .vhost .vname{display:none}   /* file name under the player hidden */
 .sbsbar .sub.szc{margin-left:auto}
@@ -526,6 +544,7 @@ td.id{width:64px}
     <div class="sbshalf" data-h="0"><div class="sbsbar" id="triBar0" role="tablist" aria-label="Golden edit and generated video"></div><div class="sbsbody" id="triBody0"><div class="sbsnote" hidden></div></div></div>
     <div class="sbshalf" data-h="1"><div class="sbsbar" id="triBar1" role="tablist" aria-label="Source clips"></div><div class="sbsbody" id="triBody1"><div class="sbsnote" hidden></div></div></div>
     <div class="sbshalf" data-h="2"><div class="sbsbar" id="triBar2" role="tablist" aria-label="Rubric, Went Wrong and Flags"></div><div class="sbsbody" id="triBody2"><div class="sbsnote" hidden></div></div></div>
+    <button class="triswap" id="triSwap" type="button" title="Swap these two players" aria-label="Swap the two video columns"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h12l-3-3M17 17H5l3 3"/></svg></button>
   </div>
 </section>
 
@@ -1032,6 +1051,7 @@ function showTab(t){
   Object.keys(panes).forEach(k => { panes[k].hidden = k !== t; });
   players.forEach(p => p.pause());
   rubricBox.classList.toggle("compact", t !== "rubric");
+  if (t !== "tri" && $("triSwap")) $("triSwap").hidden = true;
   if (isView(t)){ useView(t); sbsRender(pos); }
   else {
     placeVids();
@@ -1392,7 +1412,7 @@ function flagOpen(k, fromEl){
   const inRub = !!fromEl.closest("#rubricBox"), inBad = !!fromEl.closest("#badStage");
   if (!isView(curTab)) showTab("sbs");
   const here = inRub ? sbsOwner("rubric") : inBad ? sbsOwner("bad") : -1;
-  const target = curTab === "tri" ? 2 : here >= 0 ? here : sbsOwner("flags") >= 0 ? sbsOwner("flags") : 1;
+  const target = curTab === "tri" ? triCol("flags") : here >= 0 ? here : sbsOwner("flags") >= 0 ? sbsOwner("flags") : 1;
   if (sbsOwner("flags") !== target) sbsPick(target, "flags"); else renderFlags();
   const card = [...$("flagsStage").querySelectorAll(".fcard")].find(c => c.dataset.k === k); if (!card) return;
   const box = sbsBody(target), ta = card.querySelector(".fwhy");
@@ -1580,7 +1600,7 @@ function viewSpec(spec, avoid = -1){
   /* on the Multi-Take tab the clips are right there on the left: play it in place */
   if (curTab === "multi"){ V().active = c; renderClips(); c.player.seekTo(p.sec, true, p.end); return; }
   /* Triple View: the middle column */
-  if (curTab === "tri"){ V().active = c; if (sbsOwner("src") !== 1) sbsPick(1, "src", true); renderClips(); c.player.seekTo(p.sec, true, p.end); return; }
+  if (curTab === "tri"){ const k = triCol("src"); V().active = c; if (sbsOwner("src") !== k) sbsPick(k, "src", true); renderClips(); c.player.seekTo(p.sec, true, p.end); return; }
   /* clips open in Side by Side: in the half that isn't showing the rubric (or the one already on Source Clips) */
   if (curTab !== "sbs") showTab("sbs");
   const r = sbsOwner("rubric"), s0 = sbsOwner("src");
@@ -2211,12 +2231,38 @@ try { const j = JSON.parse(localStorage.getItem(SBS_STORE) || "null");
   if (Array.isArray(j) && j.length === 2 && j.every(h => SBS_ITEMS.some(x => x[0] === h.sel))) halves = j.map((h, i) => ({ sel: h.sel, mode: h.sel === "src" && h.mode === "clips" ? "clips" : "main", at: +h.at || i + 1 })); } catch (_) {}
 /* Triple View: three columns with fixed contents (golden edit / generated video, source clips, rubric / Went Wrong / Flags).
    It shares all of Double View's code: `halves` points at whichever layout is on screen. */
-const TRI_ITEMS = [["gold", "gen"], ["src"], ["rubric", "bad", "flags"]];
+const TRI_GROUPS = { media: ["gold", "gen"], src: ["src"], notes: ["rubric", "bad", "flags"] };
+const TRI_LABEL = { media: "Golden edit and generated video", src: "Source clips", notes: "Rubric, Went Wrong and Flags" };
 const TRI_STORE = "rr-tri-layout";
 const sbsHalves = halves;
+let triCols = ["media", "src", "notes"];      /* the swap button trades the first two */
 let triHalves = [{ sel: "gold", mode: "main", at: 1 }, { sel: "src", mode: "clips", at: 2 }, { sel: "rubric", mode: "main", at: 3 }];
 try { const j = JSON.parse(localStorage.getItem(TRI_STORE) || "null");
-  if (Array.isArray(j) && j.length === 3 && j.every((h, i) => TRI_ITEMS[i].includes(h.sel))) triHalves = j.map((h, i) => ({ sel: h.sel, mode: i === 1 ? "clips" : "main", at: +h.at || i + 1 })); } catch (_) {}
+  const cols = j && Array.isArray(j.cols) && j.cols.length === 3 && ["media", "src", "notes"].every(k => j.cols.includes(k)) && j.cols[2] === "notes" ? j.cols : ["media", "src", "notes"];
+  const hs = Array.isArray(j) ? j : j && j.halves;
+  if (Array.isArray(hs) && hs.length === 3 && hs.every((h, i) => TRI_GROUPS[cols[i]].includes(h.sel))){
+    triCols = cols; triHalves = hs.map((h, i) => ({ sel: h.sel, mode: cols[i] === "src" ? "clips" : "main", at: +h.at || i + 1 })); } } catch (_) {}
+const triItems = h => TRI_GROUPS[triCols[h]];
+const triCol = sel => triCols.findIndex(k => TRI_GROUPS[k].includes(sel));
+function triSwap(){
+  const pos = readPos();
+  [triCols[0], triCols[1]] = [triCols[1], triCols[0]];
+  [triHalves[0], triHalves[1]] = [triHalves[1], triHalves[0]];
+  if (sbsFocus < 2) sbsFocus = 1 - sbsFocus;
+  sbsSave(); sbsRender(pos);
+}
+/* the swap button sits in the gap between the first two columns, level with the middle of the videos */
+function placeSwap(){
+  const b = $("triSwap"); if (!b) return;
+  if (curTab !== "tri"){ b.hidden = true; return; }
+  const box = b.parentNode.getBoundingClientRect(), c0 = $("triBody0").getBoundingClientRect(), c1 = $("triBody1").getBoundingClientRect();
+  const v = $("triBody0").querySelector("video") || $("triBody1").querySelector("video"), r = v ? v.getBoundingClientRect() : c0;
+  b.hidden = false;
+  b.style.left = Math.round((c0.right + c1.left) / 2 - box.left - 13) + "px";
+  b.style.top = Math.round(r.top + r.height / 2 - box.top - 13) + "px";
+}
+$("triSwap").addEventListener("click", triSwap);
+window.addEventListener("resize", () => { clearTimeout(placeSwap._t); placeSwap._t = setTimeout(placeSwap, 120); });
 const isView = t => t === "sbs" || t === "tri";
 let viewKey = "sbs";
 function useView(k){ viewKey = k; halves = k === "tri" ? triHalves : sbsHalves; }
@@ -2257,7 +2303,7 @@ function sbsBar(h){
       + v.clips.map((c, i) => btn("", `data-clip="${i}" title="${escA(c.name)}"`, stem(c.name), c === v.active)).join("")
       + (viewKey === "tri" ? "" : btn(" back", 'data-back="1"', "Back", false));   /* Triple View's middle column is always the clips */
   const nf = cur ? flagsOf(cur).length : 0;
-  const items = viewKey === "tri" ? SBS_ITEMS.filter(([k]) => TRI_ITEMS[h].includes(k)) : SBS_ITEMS;
+  const items = viewKey === "tri" ? SBS_ITEMS.filter(([k]) => triItems(h).includes(k)) : SBS_ITEMS;
   return items.map(([k, label]) => btn("", `data-sel="${k}"`, k === "src" && v.clips.length ? label + " (" + v.clips.length + ")" : k === "flags" && nf ? label + " (" + nf + ")" : label, half.sel === k)).join("")
     + ((half.sel === "gold" || half.sel === "gen") && v[half.sel] && sbsOwner(half.sel) === h
        ? btn(" szc", 'data-sz="1" title="Outline the Instagram Reels safe zone on the video"', "Safe Zone Checker", safeZone) : "")
@@ -2312,7 +2358,14 @@ function sbsRender(pos){
   let rubricHalf = -1, badHalf = -1, flagsHalf = -1;
   HS().forEach(h => {
     const s = halves[h].sel, body = sbsBody(h), noteEl = body.querySelector(".sbsnote");
-    sbsBarEl(h).innerHTML = sbsBar(h);
+    const bar = sbsBarEl(h);
+    bar.innerHTML = sbsBar(h);
+    bar.classList.toggle("clipbar", halves[h].mode === "clips");
+    if (viewKey === "tri") bar.setAttribute("aria-label", TRI_LABEL[triCols[h]]);
+    const onClip = bar.querySelector(".sub.on [data-clip]");                /* keep the chosen clip in view in a scrolling row */
+    if (onClip){ const sp = onClip.parentNode, x = sp.getBoundingClientRect().left - bar.getBoundingClientRect().left + bar.scrollLeft;
+      const stick = bar.firstElementChild ? bar.firstElementChild.offsetWidth + 16 : 0, l = x - stick, r = x + sp.offsetWidth + 12;   /* clear of the "Source Clips" label */
+      if (l < bar.scrollLeft) bar.scrollLeft = Math.max(0, l); else if (r > bar.scrollLeft + bar.clientWidth) bar.scrollLeft = r - bar.clientWidth; }
     body.classList.toggle("rub", s === "rubric" && sbsOwner(s) === h);
     body.classList.toggle("flg", s === "flags" && sbsOwner(s) === h);
     let msg = "";
@@ -2340,6 +2393,7 @@ function sbsRender(pos){
   autoVidH();
   szApply();
   fitPanes();
+  placeSwap();
   if (rubricHalf >= 0){ document.querySelectorAll("#body textarea").forEach(fit); applyPos(pos); }
   updBuffering();
   /* a video still showing keeps playing (and still stops at the end of its range); any that left the screen pause */
@@ -2347,7 +2401,7 @@ function sbsRender(pos){
   players.forEach(p => { if (p.playing() && !vis.includes(p)) p.pause(); });
   liveUpdate();
 }
-function sbsSave(){ try { localStorage.setItem(viewKey === "tri" ? TRI_STORE : SBS_STORE, JSON.stringify(halves)); } catch (_) {} }
+function sbsSave(){ try { if (viewKey === "tri") localStorage.setItem(TRI_STORE, JSON.stringify({ cols: triCols, halves: triHalves })); else localStorage.setItem(SBS_STORE, JSON.stringify(halves)); } catch (_) {} }
 function sbsPick(h, sel, clips){
   const pos = readPos();
   const was = halves[h].sel, wasOwner = sbsOwner(sel) === h;
@@ -2573,7 +2627,7 @@ function viewGen(sec, avoid = -1, end = null){
     flash("This task has no generated video yet. Load it from MEGA or upload it, then try again."); return;
   }
   note("");
-  if (curTab === "tri"){ if (sbsOwner("gen") !== 0) sbsPick(0, "gen"); g.player.seekTo(sec, true, end); return; }   /* Triple View: the left column */
+  if (curTab === "tri"){ const k = triCol("gen"); if (sbsOwner("gen") !== k) sbsPick(k, "gen"); g.player.seekTo(sec, true, end); return; }   /* Triple View: the golden edit / generated video column */
   if (curTab !== "sbs") showTab("sbs");
   const o = sbsOwner("gen"), r = sbsOwner("rubric");
   const h = avoid >= 0 ? 1 - avoid : o >= 0 ? o : r >= 0 ? 1 - r : 0;
@@ -2603,7 +2657,7 @@ function viewRow(id, avoid = -1){
   const n = cur.rows.findIndex(r => (r.id || "").trim().toUpperCase() === id.toUpperCase());
   if (n < 0){ flash("This task's rubric has no row " + id + "."); return; }
   note("");
-  if (curTab === "tri"){ if (sbsOwner("rubric") !== 2) sbsPick(2, "rubric"); }   /* Triple View: the right column */
+  if (curTab === "tri"){ const k = triCol("rubric"); if (sbsOwner("rubric") !== k) sbsPick(k, "rubric"); }   /* Triple View: the right column */
   else if (curTab === "sbs" || !rubricShown()){
     if (curTab !== "sbs") showTab("sbs");
     const r = sbsOwner("rubric");
