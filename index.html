@@ -2262,6 +2262,9 @@ function placeSwap(){
   b.style.top = Math.round(r.top + r.height / 2 - box.top - 13) + "px";
 }
 $("triSwap").addEventListener("click", triSwap);
+/* keep it centred as the videos load and the columns change size (it's first placed before the videos have a size) */
+if (window.ResizeObserver){ const ro = new ResizeObserver(() => placeSwap()); ro.observe($("triBody0")); ro.observe($("triBody1")); }
+document.addEventListener("loadedmetadata", e => { if (curTab === "tri" && e.target.closest && e.target.closest("#p-tri")) placeSwap(); }, true);
 window.addEventListener("resize", () => { clearTimeout(placeSwap._t); placeSwap._t = setTimeout(placeSwap, 120); });
 const isView = t => t === "sbs" || t === "tri";
 let viewKey = "sbs";
@@ -2428,6 +2431,14 @@ function sbsPick(h, sel, clips){
   });
 });
 document.querySelectorAll(".sbshalf").forEach(el => el.addEventListener("pointerdown", () => { sbsFocus = +el.dataset.h; }, true));
+/* the mouse wheel scrolls a tab bar sideways when it has more buttons than fit (e.g. many source clips) */
+document.querySelectorAll(".sbs .sbsbar").forEach(bar => bar.addEventListener("wheel", e => {
+  if (bar.scrollWidth <= bar.clientWidth + 1 || e.ctrlKey) return;
+  const d = Math.abs(e.deltaY) > Math.abs(e.deltaX) ? e.deltaY : e.deltaX; if (!d) return;
+  const k = e.deltaMode === 1 ? 40 : e.deltaMode === 2 ? bar.clientWidth : 1;   /* lines / pages to pixels */
+  const before = bar.scrollLeft; bar.scrollLeft += d * k;
+  if (bar.scrollLeft !== before) e.preventDefault();                       /* at either end the page scrolls as usual */
+}, { passive: false }));
 document.querySelectorAll(".sbsnote").forEach(el => el.addEventListener("click", e => { if (e.target.closest(".megaload") && !e.target.disabled) megaLoad(); }));
 
 /* ---------- autosave: edits kept in this browser only (localStorage), keyed to the exact CSV loaded ---------- */
