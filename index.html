@@ -185,6 +185,10 @@ td.c-view{display:none}
 #tsOut{display:flex;flex-direction:column;gap:12px}
 .tsrow{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .tsstat{font-size:13px;color:var(--mut);line-height:1.4}
+.tsfb{flex:1 1 260px;min-width:0;padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--fg);font:inherit;font-size:14px}
+.tsfb:focus{outline:none;border-color:var(--liveblue)}
+.tsinfo .fbclear{all:unset;cursor:pointer;color:var(--mut);text-decoration:underline;margin-left:6px}
+.tsinfo .fbclear:hover{color:var(--fg)}
 .tsstat.err,.tsinfo .err{color:#e5534b}
 .tspw{padding:0}
 .tsinfo{font-size:13px;line-height:1.45;color:var(--mut);border:1px solid var(--line);border-radius:10px;padding:10px 14px}
@@ -538,6 +542,7 @@ td.id{width:64px}
         <button class="btn o-cyan" id="tsRun">Retest</button>
         <button class="btn" id="tsStop" hidden>Stop</button>
         <span class="tsstat" id="tsStat" aria-live="polite">Writes a new prompt from the golden edit, then merges it with the prompt above.</span>
+        <input id="tsFb" class="tsfb" type="text" hidden placeholder="Feedback for the next Retest, e.g. the second caption is wrong" aria-label="Feedback for the next Retest">
       </div>
       <form id="tsPw" class="tcpw tspw" hidden><label for="tsPwIn">Check password</label><input id="tsPwIn" type="password" autocomplete="current-password"><button class="btn o-cyan" type="submit">Retest</button></form>
       <div id="tsOut" hidden>
@@ -2284,7 +2289,8 @@ function tsLoad(){
   tsSyncIn();
   const r = tsGet();
   $("tsPw").hidden = true;
-  if (!tsBusy) tsStat(TS_IDLE);
+  $("tsFb").hidden = !r; $("tsFb").value = (r && r.draft) || "";
+  if (!tsBusy) tsStat(r ? "" : TS_IDLE);
   else if (tsTask !== cur) tsStat("A retest is still running for task " + (tsTask ? tsTask.id : "") + ". Its prompts will be saved there.");
   if (!r){ $("tsOut").hidden = true; return; }
   $("tsOut").hidden = false;
@@ -2300,6 +2306,8 @@ function tsInfo(r){
     + '<p><b>Music:</b> ' + esc(music) + (x.music_reason ? " - " + esc(x.music_reason) : "") + '</p>'
     + '<p><b>Voiceover:</b> ' + esc(x.voiceover || "None") + '</p>'
     + (r.merged && (x.merge_notes || []).length ? '<p><b>What the merge changed:</b></p>' + li(x.merge_notes) : "")
+    + ((r.feedback || []).length ? '<p><b>Your feedback so far:</b><button class="fbclear" type="button" id="tsFbClear">Clear</button></p>' + li(r.feedback)
+        + ((x.feedback_applied || []).length ? '<p><b>How it was applied:</b></p>' + li(x.feedback_applied) : "") : "")
     + (r.warn ? '<p class="err">' + esc(r.warn) + '</p>' : "")
     + '<p class="stale" id="tsStale" hidden>The prompt above changed since this retest, so the Merged Prompt may be out of date. Press Retest to merge again.</p>'
     + (r.meta ? '<div>' + escA(r.meta.model) + " · " + (r.meta.input_tokens || 0).toLocaleString() + " in / " + (r.meta.output_tokens || 0).toLocaleString() + " out ≈ $" + (r.meta.cost_usd || 0).toFixed(3)
@@ -2491,7 +2499,9 @@ function tsStart(){
   tsRun();
 }
 async function tsRun(){
-  const task = cur, gold = V().gold, key = tsKey(), orig = $("notesPrompt").value.trim();
+  const task = cur, gold = V().gold, key = tsKey(), orig = $("notesPrompt").value.trim(), multi = $("notesMulti").value.trim();
+  const prevRec = tsGet(), fbNew = $("tsFb").hidden ? "" : $("tsFb").value.trim();
+  const feedback = ((prevRec && prevRec.feedback) || []).concat(fbNew ? [fbNew] : []);   /* every round of feedback still applies */
   tsBusy = true; tsTask = task; $("tsRun").disabled = true; $("tsStop").hidden = false; $("tsPw").hidden = true;
   tsCtl = new AbortController(); const sig = tsCtl.signal, mine = () => cur === task;
   const prog = txt => { if (mine()) tsStat(txt); };
@@ -2519,7 +2529,8 @@ async function tsRun(){
     let res, data;
     try {
       res = await fetch("/api/synth", { method: "POST", signal: sig, headers: { "content-type": "application/json", "x-check-password": tcPass },
-        body: JSON.stringify({ sheets, spectro, transcript, audio, prompt: orig, video: { duration: fr.dur, width: fr.W, height: fr.H, frames: fr.frames.length } }) });
+        body: JSON.stringify({ sheets, spectro, transcript, audio, prompt: orig, multi, feedback,
+          previous: prevRec ? { new_prompt: prevRec.newP || "", merged_prompt: prevRec.merged || "" } : null, video: { duration: fr.dur, width: fr.W, height: fr.H, frames: fr.frames.length } }) });
       data = await res.json().catch(() => null);
     } finally { clearTimeout(kill); }
     clearInterval(timer); timer = null;
@@ -2527,7 +2538,7 @@ async function tsRun(){
     if (res.status === 404){ if (mine()) tsStat("Retest isn't set up on this site yet: the api/synth.js file is missing from the deployment.", true); return; }
     if (res.status === 413){ if (mine()) tsStat("The golden edit's frames were too large to send in one request.", true); return; }
     if (!res.ok || !data || !data.report){ if (mine()) tsStat((data && data.error) || ("The retest failed (HTTP " + res.status + ")."), true); return; }
-    const r = data.report, rec = { at: Date.now(), orig, newP: r.new_prompt || "", merged: orig ? (r.merged_prompt || "") : "", report: r, meta: data.meta, warn };
+    const r = data.report, rec = { at: Date.now(), orig, newP: r.new_prompt || "", merged: orig ? (r.merged_prompt || "") : "", report: r, meta: data.meta, warn, feedback };
     const a = tsAll(); a[key] = rec; try { localStorage.setItem(TS_STORE, JSON.stringify(a)); } catch (_) {}
     if (mine()){ tsLoad(); tsStat(warn ? "Done, with a warning below." : "Done."); }
   } catch (e) {
@@ -2538,6 +2549,10 @@ async function tsRun(){
   }
 }
 $("tsRun").addEventListener("click", tsStart);
+/* the feedback line: Enter runs Retest; an unsent draft is kept per task */
+$("tsFb").addEventListener("keydown", e => { if (e.key === "Enter"){ e.preventDefault(); tsStart(); } });
+$("tsFb").addEventListener("input", () => { const r = tsGet(); if (r){ r.draft = $("tsFb").value; tsPut(r); } });
+$("tsInfo").addEventListener("click", e => { if (e.target.id !== "tsFbClear") return; const r = tsGet(); if (!r) return; r.feedback = []; tsPut(r); tsInfo(r); });
 $("tsStop").addEventListener("click", () => { if (tsCtl) tsCtl.abort(); });
 $("tsPw").addEventListener("submit", e => { e.preventDefault(); const v = $("tsPwIn").value; if (!v) return; tcPass = v; $("tsPwIn").value = ""; tsRun(); });
 
