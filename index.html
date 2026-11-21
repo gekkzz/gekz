@@ -196,6 +196,7 @@ td.c-view{display:none}
 .tsinfo ul{margin:4px 0 8px;padding-left:18px}
 .tsinfo .stale{color:#d4a72c}
 .tsinfo p{margin:0 0 8px}
+.tsreq{margin:0 0 8px}.tsreq summary{cursor:pointer;color:var(--fg)}
 #p-prompt .stage.hastc #notesPrompt{height:calc(55vh - 120px);min-height:140px}
 .tc{margin-top:10px;border:1px solid var(--line);border-radius:10px;background:var(--panel);max-height:42vh;overflow:auto}
 .tchead{position:sticky;top:0;z-index:1;display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 12px;background:var(--panel);border-bottom:1px solid var(--line);font-size:14px}
@@ -2305,6 +2306,7 @@ function tsInfo(r){
       '<p><b>Captions found:</b> ' + ((x.captions || []).length ? '</p>' + li(x.captions.map(c => "“" + c + "”")) : 'none</p>')
     + '<p><b>Music:</b> ' + esc(music) + (x.music_reason ? " - " + esc(x.music_reason) : "") + '</p>'
     + '<p><b>Voiceover:</b> ' + esc(x.voiceover || "None") + '</p>'
+    + ((x.requirements || []).length ? '<details class="tsreq"><summary>Checklist the New Prompt was written from (' + x.requirements.length + ')</summary>' + li(x.requirements) + '</details>' : "")
     + (r.merged && (x.merge_notes || []).length ? '<p><b>What the merge changed:</b></p>' + li(x.merge_notes) : "")
     + ((r.feedback || []).length ? '<p><b>Your feedback so far:</b><button class="fbclear" type="button" id="tsFbClear">Clear</button></p>' + li(r.feedback)
         + ((x.feedback_applied || []).length ? '<p><b>How it was applied:</b></p>' + li(x.feedback_applied) : "") : "")
