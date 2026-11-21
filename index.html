@@ -153,7 +153,7 @@ td::before{display:none}
 .nhead.top{margin-top:0}
 .sbsbody #notesBad{height:calc(100vh - 230px)}
 .btn.sq{padding:3px 12px;min-width:38px;text-align:center;font-size:18px;line-height:1.25}
-#pfsVal{min-width:46px;text-align:center}
+#pfsVal,#tsfsVal{min-width:46px;text-align:center}
 td.c-view{display:none}
 .view{all:unset;display:inline-flex;align-items:center;cursor:pointer;padding:3px 11px;border:2px solid #2c6ab8;border-radius:8px;font-size:13px;font-weight:400;line-height:1.4;color:var(--mut)}
 .view:hover{border-color:#388bfd;color:var(--fg);background:var(--btn)}
@@ -177,6 +177,21 @@ td.c-view{display:none}
 #multiVid .subtabs{padding:0;border:0;margin:0 0 var(--mvgap,8px);min-height:var(--mvh,37px);align-items:center}
 .btn.o-cyan{border:2px solid #7cc4ff;padding:7px 13px}
 .btn.o-cyan:disabled{opacity:.6;cursor:progress}
+/* Testing tab: golden edit left; prompt, Retest, New Prompt and Merged Prompt stacked on the right */
+#p-test .tcol{position:static}
+#p-test [hidden]{display:none !important}
+#testVid{position:sticky;top:12px}
+@media (max-width:960px){#testVid{position:static}}
+#tsOut{display:flex;flex-direction:column;gap:12px}
+.tsrow{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.tsstat{font-size:13px;color:var(--mut);line-height:1.4}
+.tsstat.err,.tsinfo .err{color:#e5534b}
+.tspw{padding:0}
+.tsinfo{font-size:13px;line-height:1.45;color:var(--mut);border:1px solid var(--line);border-radius:10px;padding:10px 14px}
+.tsinfo b{color:var(--fg);font-weight:600}
+.tsinfo ul{margin:4px 0 8px;padding-left:18px}
+.tsinfo .stale{color:#d4a72c}
+.tsinfo p{margin:0 0 8px}
 #p-prompt .stage.hastc #notesPrompt{height:calc(55vh - 120px);min-height:140px}
 .tc{margin-top:10px;border:1px solid var(--line);border-radius:10px;background:var(--panel);max-height:42vh;overflow:auto}
 .tchead{position:sticky;top:0;z-index:1;display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 12px;background:var(--panel);border-bottom:1px solid var(--line);font-size:14px}
@@ -428,6 +443,7 @@ td.id{width:64px}
     <button class="tab" role="tab" aria-selected="false" data-tab="verdicts">Verdicts</button>
     <button class="tab" role="tab" aria-selected="false" data-tab="sbs">Double View</button>
     <button class="tab" role="tab" aria-selected="false" data-tab="tri">Triple View</button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="test">Testing</button>
   </nav>
   <div class="bar">
     <div class="barrow">
@@ -505,6 +521,36 @@ td.id{width:64px}
         </div>
       </div>
       <div class="side" id="slotPrompt"></div>
+    </div>
+  </div>
+</section>
+
+<section id="p-test" hidden>
+  <div class="split">
+    <div class="stage" id="testVid"><div id="testGoldStage"></div>
+      <div class="empty" id="testGoldEmpty">No golden edit for this task yet. Use Load videos from MEGA, or Upload Golden Edit.</div></div>
+    <div class="pcol tcol">
+      <div class="pbox">
+        <div class="pbar"><label for="testPrompt">Prompt</label><span class="nact"><button class="btn sq" id="tsfsDown" aria-label="Decrease font size" title="Smaller text">&minus;</button><span class="tip" id="tsfsVal" aria-live="polite">15px</span><button class="btn sq" id="tsfsUp" aria-label="Increase font size" title="Larger text">+</button></span></div>
+        <textarea id="testPrompt" class="notes pnotes" spellcheck="false" placeholder="The task's prompt (column C) appears here"></textarea>
+      </div>
+      <div class="tsrow">
+        <button class="btn o-cyan" id="tsRun">Retest</button>
+        <button class="btn" id="tsStop" hidden>Stop</button>
+        <span class="tsstat" id="tsStat" aria-live="polite">Writes a new prompt from the golden edit, then merges it with the prompt above.</span>
+      </div>
+      <form id="tsPw" class="tcpw tspw" hidden><label for="tsPwIn">Check password</label><input id="tsPwIn" type="password" autocomplete="current-password"><button class="btn o-cyan" type="submit">Retest</button></form>
+      <div id="tsOut" hidden>
+        <div class="pbox">
+          <div class="pbar"><label for="tsNew">New Prompt</label><span class="nact"><span class="tip" id="tsNewTip" aria-live="polite"></span><button class="btn" id="tsNewCopy">Copy</button></span></div>
+          <textarea id="tsNew" class="notes pnotes" spellcheck="false"></textarea>
+        </div>
+        <div class="pbox" id="tsMergedBox">
+          <div class="pbar"><label for="tsMerged">Merged Prompt</label><span class="nact"><span class="tip" id="tsMergedTip" aria-live="polite"></span><button class="btn" id="tsMergedCopy">Copy</button></span></div>
+          <textarea id="tsMerged" class="notes pnotes" spellcheck="false"></textarea>
+        </div>
+        <div class="tsinfo" id="tsInfo"></div>
+      </div>
     </div>
   </div>
 </section>
@@ -787,7 +833,7 @@ function selectTask(t){
   cur = t;
   loadTexts();
   showVids(cur || NOTASK);
-  tcReset(); megaHide();
+  tcReset(); megaHide(); tsLoad();
   if (cur){
     $("taskSel").value = cur.id;
     markCurOpt();
@@ -1009,10 +1055,10 @@ document.querySelectorAll("label.btn").forEach(l => l.addEventListener("keydown"
 }));
 
 /* ---------- tabs ---------- */
-const panes = { rubric: $("p-rubric"), prompt: $("p-prompt"), src: $("p-src"), gold: $("p-gold"), gen: $("p-gen"), multi: $("p-multi"), verdicts: $("p-verdicts"), sbs: $("p-sbs"), tri: $("p-tri") };
+const panes = { rubric: $("p-rubric"), prompt: $("p-prompt"), test: $("p-test"), src: $("p-src"), gold: $("p-gold"), gen: $("p-gen"), multi: $("p-multi"), verdicts: $("p-verdicts"), sbs: $("p-sbs"), tri: $("p-tri") };
 let curTab = "rubric";
 const rubricBox = $("rubricBox");
-const slots = { rubric: $("p-rubric"), prompt: $("slotPrompt"), src: $("slotSrc"), gold: $("slotGold"), gen: $("slotGen"), multi: $("rubricPark"), verdicts: $("rubricPark"), sbs: $("rubricPark"), tri: $("rubricPark") };   /* Multi-Take and Verdicts have no rubric beside them */
+const slots = { rubric: $("p-rubric"), prompt: $("slotPrompt"), src: $("slotSrc"), gold: $("slotGold"), gen: $("slotGen"), multi: $("rubricPark"), test: $("rubricPark"), verdicts: $("rubricPark"), sbs: $("rubricPark"), tri: $("rubricPark") };   /* Multi-Take and Verdicts have no rubric beside them */
 /* keep the rubric at the same row when switching tabs (see the live app for the reasoning) */
 const winMode = t => t === "rubric" || window.innerWidth <= 960;
 const rowEls = () => [...document.querySelectorAll("#body tr")];
@@ -1047,6 +1093,7 @@ function showTab(t){
   stopHold();
   const pos = readPos();
   curTab = t;
+  if (t === "test") tsSyncIn();
   document.querySelectorAll(".tab").forEach(b => { const on = b.dataset.tab === t; b.classList.toggle("on", on); b.setAttribute("aria-selected", on); });
   Object.keys(panes).forEach(k => { panes[k].hidden = k !== t; });
   players.forEach(p => p.pause());
@@ -1550,7 +1597,7 @@ function tsStep(dir){
 /* ---------- keyboard ---------- */
 const SKIP = 5, HOLD_DELAY = 350, HOLD_EVERY = 200;
 const KEYDIR = { a: -1, arrowleft: -1, d: 1, arrowright: 1 };
-const activePlayer = () => { const v = V(); return curTab === "src" ? (v.active && v.active.player) : (curTab === "gold" || curTab === "gen") ? (v[curTab] && v[curTab].player) : isView(curTab) ? sbsFocusPlayer() : null; };
+const activePlayer = () => { const v = V(); return curTab === "src" ? (v.active && v.active.player) : (curTab === "gold" || curTab === "gen") ? (v[curTab] && v[curTab].player) : curTab === "test" ? (v.gold && v.gold.player) : isView(curTab) ? sbsFocusPlayer() : null; };
 const typing = el => !!el && (/^(TEXTAREA|SELECT)$/.test(el.tagName) || el.isContentEditable ||
   (el.tagName === "INPUT" && !el.classList.contains("seek")));
 let hold = null;
@@ -1648,11 +1695,10 @@ const PFS_MIN = 10, PFS_MAX = 40, PFS_STEP = 2;
 let pfs = 15;
 function setPFS(n){
   pfs = Math.min(PFS_MAX, Math.max(PFS_MIN, n));
-  $("notesPrompt").style.fontSize = pfs + "px"; $("pfsVal").textContent = pfs + "px";
-  $("pfsDown").disabled = pfs <= PFS_MIN; $("pfsUp").disabled = pfs >= PFS_MAX;
+  ["notesPrompt", "testPrompt", "tsNew", "tsMerged"].forEach(id => { $(id).style.fontSize = pfs + "px"; });
+  ["pfs", "tsfs"].forEach(p => { $(p + "Val").textContent = pfs + "px"; $(p + "Down").disabled = pfs <= PFS_MIN; $(p + "Up").disabled = pfs >= PFS_MAX; });
 }
-$("pfsDown").addEventListener("click", () => setPFS(pfs - PFS_STEP));
-$("pfsUp").addEventListener("click", () => setPFS(pfs + PFS_STEP));
+["pfs", "tsfs"].forEach(p => { $(p + "Down").addEventListener("click", () => setPFS(pfs - PFS_STEP)); $(p + "Up").addEventListener("click", () => setPFS(pfs + PFS_STEP)); });
 setPFS(pfs);
 
 
@@ -2209,6 +2255,292 @@ $("notesPrompt").addEventListener("input", tcStaleCheck);
 $("body").addEventListener("input", tcStaleCheck);
 $("body").addEventListener("click", () => setTimeout(tcStaleCheck));
 
+/* ---------- Testing tab: Retest writes a synthetic prompt from the golden edit ----------
+   Everything heavy happens in this browser: frames of the golden edit are tiled into contact sheets, the audio is
+   transcribed on this computer by Whisper (downloaded once from Hugging Face, then kept by the browser), and a
+   spectrogram is drawn for the music check. Only those images, the transcript text and the task's prompt go to
+   /api/synth (a Vercel function that calls Claude). It returns a New Prompt and a Merged Prompt in one request. */
+const TS_STORE = "rr-synth", TS_KEEP_DAYS = 60;
+const TS_ASR_MODEL = "Xenova/whisper-base";
+const TS_TJS = "https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.1/dist/transformers.min.js";
+const TS_BUDGET = 3.4e6;                       /* base64 bytes of images per request (Vercel takes about 4.5 MB) */
+let tsBusy = false, tsTask = null, tsCtl = null, tsWorker = null, tsAsrReq = 0;
+const tsKey = () => cur && sheetHash ? sheetHash + "|" + cur.id : null;
+function tsAll(){
+  let a = {}; try { a = JSON.parse(localStorage.getItem(TS_STORE) || "{}") || {}; } catch (_) {}
+  const cut = Date.now() - TS_KEEP_DAYS * 864e5; Object.keys(a).forEach(k => { if (!(a[k] && a[k].at > cut)) delete a[k]; });
+  return a;
+}
+function tsPut(rec){ const k = tsKey(); if (!k) return; const a = tsAll(); if (rec) a[k] = rec; else delete a[k]; try { localStorage.setItem(TS_STORE, JSON.stringify(a)); } catch (_) {} }
+const tsGet = () => { const k = tsKey(); return k ? tsAll()[k] || null : null; };
+function tsStat(txt, err){ const e = $("tsStat"); e.textContent = txt; e.classList.toggle("err", !!err); }
+const TS_IDLE = "Writes a new prompt from the golden edit, then merges it with the prompt above.";
+function tsSyncIn(){ if ($("testPrompt").value !== $("notesPrompt").value) $("testPrompt").value = $("notesPrompt").value; tsStaleCheck(); }
+/* the Testing prompt box and the Prompt tab's box are the same text: typing in either updates both */
+$("testPrompt").addEventListener("input", () => { $("notesPrompt").value = $("testPrompt").value; $("notesPrompt").dispatchEvent(new Event("input")); tsStaleCheck(); });
+$("notesPrompt").addEventListener("input", () => { if (curTab !== "test") tsSyncIn(); });
+
+function tsLoad(){
+  tsSyncIn();
+  const r = tsGet();
+  $("tsPw").hidden = true;
+  if (!tsBusy) tsStat(TS_IDLE);
+  else if (tsTask !== cur) tsStat("A retest is still running for task " + (tsTask ? tsTask.id : "") + ". Its prompts will be saved there.");
+  if (!r){ $("tsOut").hidden = true; return; }
+  $("tsOut").hidden = false;
+  $("tsNew").value = r.newP || ""; $("tsMerged").value = r.merged || "";
+  $("tsMergedBox").hidden = !r.merged;
+  tsInfo(r);
+}
+function tsInfo(r){
+  const x = r.report || {}, li = a => '<ul>' + a.map(s => '<li>' + esc(s) + '</li>').join("") + '</ul>';
+  const music = { yes: "Yes", no: "No", unsure: "Unsure" }[x.music] || "Unsure";
+  $("tsInfo").innerHTML =
+      '<p><b>Captions found:</b> ' + ((x.captions || []).length ? '</p>' + li(x.captions.map(c => "“" + c + "”")) : 'none</p>')
+    + '<p><b>Music:</b> ' + esc(music) + (x.music_reason ? " - " + esc(x.music_reason) : "") + '</p>'
+    + '<p><b>Voiceover:</b> ' + esc(x.voiceover || "None") + '</p>'
+    + (r.merged && (x.merge_notes || []).length ? '<p><b>What the merge changed:</b></p>' + li(x.merge_notes) : "")
+    + (r.warn ? '<p class="err">' + esc(r.warn) + '</p>' : "")
+    + '<p class="stale" id="tsStale" hidden>The prompt above changed since this retest, so the Merged Prompt may be out of date. Press Retest to merge again.</p>'
+    + (r.meta ? '<div>' + escA(r.meta.model) + " · " + (r.meta.input_tokens || 0).toLocaleString() + " in / " + (r.meta.output_tokens || 0).toLocaleString() + " out ≈ $" + (r.meta.cost_usd || 0).toFixed(3)
+        + " · " + Math.round(r.meta.seconds || 0) + "s · " + new Date(r.at).toLocaleString() + ". AI-generated: double-check before using.</div>" : "");
+  tsStaleCheck();
+}
+function tsStaleCheck(){ const e = $("tsStale"), r = tsGet(); if (e && r) e.hidden = !r.merged || $("notesPrompt").value.trim() === (r.orig || ""); }
+["tsNew", "tsMerged"].forEach(id => $(id).addEventListener("input", () => { const r = tsGet(); if (!r) return; r[id === "tsNew" ? "newP" : "merged"] = $(id).value; tsPut(r); }));
+$("tsNewCopy").addEventListener("click", () => copyText($("tsNew").value, $("tsNewTip")));
+$("tsMergedCopy").addEventListener("click", () => copyText($("tsMerged").value, $("tsMergedTip")));
+
+/* --- helpers --- */
+const tsAbortErr = () => Object.assign(new Error("Stopped."), { name: "AbortError" });
+function tsCheck(sig){ if (sig && sig.aborted) throw tsAbortErr(); }
+function tsWait(el, ev, ms, sig){
+  return new Promise((ok, no) => {
+    const done = f => (x) => { clearTimeout(t); el.removeEventListener(ev, a); el.removeEventListener("error", b); if (sig) sig.removeEventListener("abort", c); f(x); };
+    const a = done(ok), b = done(() => no(new Error("The golden edit couldn't be read in this browser."))), c = done(() => no(tsAbortErr()));
+    const t = setTimeout(done(() => no(new Error("The golden edit took too long to load. Check your connection and try again."))), ms);
+    el.addEventListener(ev, a, { once: true }); el.addEventListener("error", b, { once: true }); if (sig) sig.addEventListener("abort", c, { once: true });
+  });
+}
+const tsB64 = blob => new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(",")[1] || ""); r.onerror = () => no(r.error); r.readAsDataURL(blob); });
+const tsJpeg = (cv, q) => new Promise(ok => cv.toBlob(b => ok(b), "image/jpeg", q)).then(tsB64);
+
+/* frames: 2 a second (fewer for long edits), skipping ones that look the same as the last kept frame */
+async function tsFrames(url, sig, prog){
+  const v = document.createElement("video"); v.muted = true; v.preload = "auto"; v.playsInline = true; v.src = url;
+  try {
+    await tsWait(v, "loadedmetadata", 90000, sig);
+    const dur = v.duration, W = v.videoWidth, H = v.videoHeight;
+    if (!(dur > 0) || !W) throw new Error("The golden edit couldn't be read in this browser.");
+    const fps = dur <= 60 ? 2 : Math.max(0.5, 120 / dur), n = Math.max(1, Math.min(360, Math.floor(dur * fps)));
+    const sc = 560 / Math.max(W, H), fw = Math.round(W * sc), fh = Math.round(H * sc);
+    const tiny = document.createElement("canvas"); tiny.width = 24; tiny.height = Math.max(8, Math.round(24 * H / W));
+    const tc = tiny.getContext("2d", { willReadFrequently: true });
+    const out = []; let prev = null, lastT = -1e9;
+    for (let i = 0; i < n; i++){
+      tsCheck(sig);
+      const t = Math.min(dur - 0.05, (i + 0.5) / fps);
+      v.currentTime = t; await tsWait(v, "seeked", 60000, sig);
+      tc.drawImage(v, 0, 0, tiny.width, tiny.height);
+      const px = tc.getImageData(0, 0, tiny.width, tiny.height).data;
+      let diff = 255; if (prev){ diff = 0; for (let j = 0; j < px.length; j += 4) diff += Math.abs(px[j] - prev[j]) + Math.abs(px[j + 1] - prev[j + 1]) + Math.abs(px[j + 2] - prev[j + 2]); diff /= px.length * 0.75; }
+      if (diff > 2.5 || t - lastT >= 3 || i === n - 1){
+        const cv = document.createElement("canvas"); cv.width = fw; cv.height = fh; cv.getContext("2d").drawImage(v, 0, 0, fw, fh);
+        out.push({ t, cv }); prev = px; lastT = t;
+      }
+      prog("Reading the golden edit's frames… " + (i + 1) + " of " + n);
+    }
+    let frames = out;
+    if (frames.length > 150){ const k = frames.length / 150; frames = Array.from({ length: 150 }, (_, i) => out[Math.floor(i * k)]); }
+    return { dur, W, H, frames };
+  } finally { v.removeAttribute("src"); v.load(); }
+}
+/* tile 6 frames per sheet (3x2 for tall video, 2x3 for wide), each labelled with its time */
+function tsSheets(fr, scale){
+  const tall = fr.H >= fr.W, cols = tall ? 3 : 2, rows = tall ? 2 : 3, per = cols * rows, g = 4;
+  const fw = Math.round(fr.frames[0].cv.width * scale), fh = Math.round(fr.frames[0].cv.height * scale), out = [];
+  for (let s = 0; s < fr.frames.length; s += per){
+    const grp = fr.frames.slice(s, s + per), cv = document.createElement("canvas");
+    cv.width = cols * fw + (cols - 1) * g; cv.height = Math.ceil(grp.length / cols) * (fh + g) - g;
+    const c = cv.getContext("2d"); c.fillStyle = "#000"; c.fillRect(0, 0, cv.width, cv.height);
+    grp.forEach((f, i) => {
+      const x = (i % cols) * (fw + g), y = Math.floor(i / cols) * (fh + g);
+      c.drawImage(f.cv, x, y, fw, fh);
+      const lab = f.t.toFixed(1) + "s"; c.font = "bold 13px system-ui, sans-serif";
+      c.fillStyle = "rgba(0,0,0,.7)"; c.fillRect(x, y, c.measureText(lab).width + 10, 19);
+      c.fillStyle = "#ffeb3b"; c.fillText(lab, x + 5, y + 14);
+    });
+    out.push(cv);
+  }
+  return out;
+}
+async function tsEncode(fr, prog){
+  for (const [scale, q] of [[1, .8], [1, .65], [.85, .6], [.72, .55], [.6, .5]]){
+    prog("Building contact sheets…");
+    const imgs = await Promise.all(tsSheets(fr, scale).map(cv => tsJpeg(cv, q)));
+    if (imgs.reduce((a, s) => a + s.length, 0) <= TS_BUDGET || scale === .6) return imgs;
+  }
+}
+
+/* the whole file, read through the streaming worker in pieces (it answers one range at a time) */
+async function tsBytes(url, sig, prog){
+  if (url.startsWith("blob:")) return (await fetch(url, { signal: sig })).arrayBuffer();
+  const parts = []; let at = 0, size = Infinity;
+  while (at < size){
+    const r = await fetch(url, { headers: { Range: "bytes=" + at + "-" + (at + 16 * 1048576 - 1) }, signal: sig });
+    if (r.status === 200){ return r.arrayBuffer(); }
+    if (r.status !== 206) throw new Error("HTTP " + r.status);
+    const m = /\/(\d+)/.exec(r.headers.get("content-range") || ""); if (m) size = +m[1];
+    const b = new Uint8Array(await r.arrayBuffer()); if (!b.length) break;
+    parts.push(b); at += b.length;
+    if (isFinite(size)) prog("Reading the audio… " + Math.round(at / size * 100) + "%");
+  }
+  const all = new Uint8Array(at); let o = 0; parts.forEach(p => { all.set(p, o); o += p.length; });
+  return all.buffer;
+}
+async function tsAudio(url, dur, sig, prog){
+  const buf = await tsBytes(url, sig, prog);
+  const ctx = new OfflineAudioContext(1, Math.ceil((dur + 1) * 16000), 16000);
+  const ab = await ctx.decodeAudioData(buf);            /* resampled to 16 kHz, which is what Whisper wants */
+  const n = ab.length, mono = new Float32Array(n);
+  for (let ch = 0; ch < ab.numberOfChannels; ch++){ const d = ab.getChannelData(ch); for (let i = 0; i < n; i++) mono[i] += d[i] / ab.numberOfChannels; }
+  return mono;
+}
+
+/* Whisper runs in a background worker so the page stays responsive */
+function tsAsr(pcm, sig, prog){
+  if (window.RR_ASR) return window.RR_ASR(pcm);       /* test hook */
+  if (!tsWorker){
+    const code = `import { pipeline, env } from "${TS_TJS}";
+env.allowLocalModels = false;
+let asr = null;
+self.onmessage = async e => {
+  const { id, pcm } = e.data;
+  try {
+    if (!asr) asr = await pipeline("automatic-speech-recognition", "${TS_ASR_MODEL}", { dtype: "q8", device: "wasm",
+      progress_callback: p => { if (p.status === "progress" && p.total > 1e6) self.postMessage({ id, load: p.loaded / p.total, file: p.file }); } });
+    self.postMessage({ id, phase: "run" });
+    const out = await asr(pcm, { chunk_length_s: 30, stride_length_s: 5, return_timestamps: true });
+    self.postMessage({ id, out: { text: out.text || "", chunks: (out.chunks || []).map(c => ({ start: c.timestamp[0], end: c.timestamp[1], text: c.text })) } });
+  } catch (err) { asr = null; self.postMessage({ id, error: String((err && err.message) || err) }); }
+};`;
+    tsWorker = new Worker(URL.createObjectURL(new Blob([code], { type: "text/javascript" })), { type: "module" });
+  }
+  const id = ++tsAsrReq, w = tsWorker;
+  return new Promise((ok, no) => {
+    const files = {};
+    const stop = () => { w.removeEventListener("message", on); w.removeEventListener("error", bad); };
+    const bad = e => { stop(); tsWorker = null; w.terminate(); no(new Error("The speech model couldn't start" + (e && e.message ? ": " + e.message : "."))); };
+    const on = e => {
+      const d = e.data; if (d.id !== id) return;
+      if (d.load != null){ files[d.file] = d.load; const v = Object.values(files); prog("Loading the speech model (first time only)… " + Math.round(v.reduce((a, b) => a + b, 0) / v.length * 100) + "%"); }
+      else if (d.phase) prog("Transcribing the audio on this computer…");
+      else { stop(); d.error ? no(new Error(d.error)) : ok(d.out); }
+    };
+    w.addEventListener("message", on); w.addEventListener("error", bad);
+    if (sig) sig.addEventListener("abort", () => { stop(); w.terminate(); tsWorker = null; no(tsAbortErr()); }, { once: true });
+    prog("Loading the speech model…");
+    w.postMessage({ id, pcm });
+  });
+}
+
+/* loudness numbers and a spectrogram picture for the music check */
+function tsFFT(re, im){
+  const n = re.length;
+  for (let i = 1, j = 0; i < n; i++){ let b = n >> 1; for (; j & b; b >>= 1) j ^= b; j ^= b; if (i < j){ [re[i], re[j]] = [re[j], re[i]]; [im[i], im[j]] = [im[j], im[i]]; } }
+  for (let len = 2; len <= n; len <<= 1){
+    const a = -2 * Math.PI / len, wr = Math.cos(a), wi = Math.sin(a);
+    for (let i = 0; i < n; i += len){ let cr = 1, ci = 0;
+      for (let k = 0; k < len / 2; k++){ const p = i + k, q = p + len / 2, tr = re[q] * cr - im[q] * ci, ti = re[q] * ci + im[q] * cr;
+        re[q] = re[p] - tr; im[q] = im[p] - ti; re[p] += tr; im[p] += ti; const nr = cr * wr - ci * wi; ci = cr * wi + ci * wr; cr = nr; } }
+  }
+}
+async function tsSound(pcm, chunks){
+  const SR = 16000, win = SR / 2, db = [];
+  for (let s = 0; s + win / 2 <= pcm.length; s += win){ let e = 0, m = 0; for (let i = s; i < Math.min(pcm.length, s + win); i++, m++) e += pcm[i] * pcm[i]; db.push(10 * Math.log10(e / Math.max(1, m) + 1e-10)); }
+  const speech = db.map((_, i) => chunks.some(c => c.end != null ? (i + 0.5) / 2 >= c.start - 0.25 && (i + 0.5) / 2 <= c.end + 0.25 : (i + 0.5) / 2 >= c.start));
+  const med = a => { if (!a.length) return null; const b = [...a].sort((x, y) => x - y); return b[b.length >> 1]; };
+  const sp = db.filter((_, i) => speech[i]), gp = db.filter((_, i) => !speech[i]);
+  const stats = { available: true, speechSec: sp.length / 2, gapSec: gp.length / 2, speechDb: med(sp), gapDb: med(gp), gapSilent: gp.length ? gp.filter(x => x < -50).length / gp.length : 0 };
+  /* picture: loudness strip on top (speech shaded), then 0-4 kHz */
+  const N = 512, cols = Math.min(1200, Math.max(200, Math.floor(pcm.length / 160))), hop = Math.max(1, Math.floor((pcm.length - N) / cols)), bins = 128;
+  const cv = document.createElement("canvas"); cv.width = cols; cv.height = 80 + bins * 2;
+  const c = cv.getContext("2d"); c.fillStyle = "#000"; c.fillRect(0, 0, cv.width, cv.height);
+  const mags = new Float32Array(cols * bins), re = new Float32Array(N), im = new Float32Array(N), hann = Float32Array.from({ length: N }, (_, i) => 0.5 - 0.5 * Math.cos(2 * Math.PI * i / (N - 1)));
+  for (let x = 0; x < cols; x++){ const s = x * hop; for (let i = 0; i < N; i++){ re[i] = (pcm[s + i] || 0) * hann[i]; im[i] = 0; } tsFFT(re, im);
+    for (let b = 0; b < bins; b++) mags[x * bins + b] = 10 * Math.log10(re[b] * re[b] + im[b] * im[b] + 1e-10); }
+  const sorted = Float32Array.from(mags).sort(), lo = sorted[Math.floor(sorted.length * .2)], hi = sorted[Math.floor(sorted.length * .995)];
+  const img = c.createImageData(cols, bins * 2);
+  for (let x = 0; x < cols; x++) for (let b = 0; b < bins; b++){ const v = Math.max(0, Math.min(1, (mags[x * bins + b] - lo) / (hi - lo || 1)));
+    for (const yy of [0, 1]){ const o = (((bins - 1 - b) * 2 + yy) * cols + x) * 4; img.data[o] = 255 * Math.min(1, v * 1.6); img.data[o + 1] = 255 * Math.max(0, v * 1.6 - .6); img.data[o + 2] = 255 * Math.max(0, .5 - Math.abs(v - .35)) ; img.data[o + 3] = 255; } }
+  c.putImageData(img, 0, 80);
+  const tx = t => t / (pcm.length / SR) * cols;
+  c.fillStyle = "rgba(80,160,255,.35)"; chunks.forEach(k => { const a = tx(k.start || 0), b = tx(k.end != null ? k.end : pcm.length / SR); c.fillRect(a, 0, Math.max(1, b - a), 78); });
+  c.strokeStyle = "#7f7"; c.beginPath(); db.forEach((d, i) => { const x = tx((i + 0.5) / 2), y = 78 - Math.max(0, Math.min(1, (d + 70) / 70)) * 76; i ? c.lineTo(x, y) : c.moveTo(x, y); }); c.stroke();
+  c.fillStyle = "#fff"; c.font = "11px system-ui, sans-serif"; for (let s = 0; s < pcm.length / SR; s += 5) c.fillText(s + "s", tx(s) + 2, 10);
+  return { stats, spectro: await tsJpeg(cv, .8) };
+}
+
+/* --- the Retest button --- */
+function tsStart(){
+  if (tsBusy) return;
+  if (location.protocol === "file:"){ tsStat("Retest only works on your Vercel site, not when index.html is opened from your computer.", true); return; }
+  if (!cur){ tsStat("Upload the task sheet and pick a task first.", true); return; }
+  if (!V().gold){ tsStat("This task has no golden edit yet. Load the videos from MEGA, or upload the golden edit.", true); return; }
+  if (!tcPass){ $("tsPw").hidden = false; tsStat("Enter the check password (the same one Test Against Rubric uses)."); $("tsPwIn").focus(); return; }
+  tsRun();
+}
+async function tsRun(){
+  const task = cur, gold = V().gold, key = tsKey(), orig = $("notesPrompt").value.trim();
+  tsBusy = true; tsTask = task; $("tsRun").disabled = true; $("tsStop").hidden = false; $("tsPw").hidden = true;
+  tsCtl = new AbortController(); const sig = tsCtl.signal, mine = () => cur === task;
+  const prog = txt => { if (mine()) tsStat(txt); };
+  let warn = "", timer = null;
+  try {
+    const fr = await tsFrames(gold.url, sig, prog);
+    const sheets = await tsEncode(fr, prog);
+    let transcript = null, audio = { available: false }, spectro = null;
+    let pcm = null;
+    try {
+      prog("Reading the audio…");
+      pcm = await tsAudio(gold.url, fr.dur, sig, prog);
+      tsCheck(sig);
+      transcript = await tsAsr(pcm, sig, prog);
+    } catch (e) {
+      if (e.name === "AbortError") throw e;
+      warn = pcm ? "The speech model couldn't run (" + (e.message || e) + "), so the voiceover part is a guess from the frames; the music check still used the audio."
+                 : "The audio couldn't be read (" + (e.message || e) + "), so the voiceover and music parts are guesses from the frames alone.";
+    }
+    tsCheck(sig);
+    if (pcm){ const s = await tsSound(pcm, (transcript && transcript.chunks) || []); audio = s.stats; spectro = s.spectro; if (!transcript) audio.noSpeechModel = true; }
+    const t0 = Date.now(); prog("Asking Claude… 0s (usually under two minutes)");
+    timer = setInterval(() => prog("Asking Claude… " + Math.round((Date.now() - t0) / 1000) + "s (usually under two minutes)"), 1000);
+    const kill = setTimeout(() => tsCtl && tsCtl.abort(), 260000);
+    let res, data;
+    try {
+      res = await fetch("/api/synth", { method: "POST", signal: sig, headers: { "content-type": "application/json", "x-check-password": tcPass },
+        body: JSON.stringify({ sheets, spectro, transcript, audio, prompt: orig, video: { duration: fr.dur, width: fr.W, height: fr.H, frames: fr.frames.length } }) });
+      data = await res.json().catch(() => null);
+    } finally { clearTimeout(kill); }
+    clearInterval(timer); timer = null;
+    if (res.status === 401){ tcPass = ""; if (mine()){ $("tsPw").hidden = false; $("tsPwIn").value = ""; tsStat("Wrong password. Try again.", true); } return; }
+    if (res.status === 404){ if (mine()) tsStat("Retest isn't set up on this site yet: the api/synth.js file is missing from the deployment.", true); return; }
+    if (res.status === 413){ if (mine()) tsStat("The golden edit's frames were too large to send in one request.", true); return; }
+    if (!res.ok || !data || !data.report){ if (mine()) tsStat((data && data.error) || ("The retest failed (HTTP " + res.status + ")."), true); return; }
+    const r = data.report, rec = { at: Date.now(), orig, newP: r.new_prompt || "", merged: orig ? (r.merged_prompt || "") : "", report: r, meta: data.meta, warn };
+    const a = tsAll(); a[key] = rec; try { localStorage.setItem(TS_STORE, JSON.stringify(a)); } catch (_) {}
+    if (mine()){ tsLoad(); tsStat(warn ? "Done, with a warning below." : "Done."); }
+  } catch (e) {
+    if (mine()) tsStat(e.name === "AbortError" ? "Stopped." : /Failed to fetch|NetworkError/i.test(e.message) ? "Could not reach the retest service. Check your connection and try again." : (e.message || String(e)), e.name !== "AbortError");
+  } finally {
+    if (timer) clearInterval(timer);
+    tsBusy = false; tsTask = null; tsCtl = null; $("tsRun").disabled = false; $("tsStop").hidden = true;
+  }
+}
+$("tsRun").addEventListener("click", tsStart);
+$("tsStop").addEventListener("click", () => { if (tsCtl) tsCtl.abort(); });
+$("tsPw").addEventListener("submit", e => { e.preventDefault(); const v = $("tsPwIn").value; if (!v) return; tcPass = v; $("tsPwIn").value = ""; tsRun(); });
+
 /* ---------- Side by Side: two halves, each showing the rubric, a source clip, the golden edit or the generated video ---------- */
 const SBS_ITEMS = [["src", "Source Clips"], ["gold", "Golden Edit"], ["gen", "Generated Video"], ["rubric", "Rubric"], ["bad", "Went Wrong"], ["flags", "Flags"]];
 const SBS_NAME = { rubric: "The rubric", src: "The source clip", gold: "The golden edit", gen: "The generated video", bad: "Went Wrong", flags: "Flags" };
@@ -2286,7 +2618,8 @@ function badHome(){ moveTo($("badStage"), $("badHome")); }
 function sendHome(v){
   badHome();
   v.clips.forEach(c => moveTo(c.host, $("clipStage")));
-  ["gold", "gen"].forEach(k => { if (v[k]) moveTo(v[k].host, $(STAGE[k])); });
+  ["gold", "gen"].forEach(k => { if (v[k]) moveTo(v[k].host, k === "gold" && curTab === "test" ? $("testGoldStage") : $(STAGE[k])); });   /* the Testing tab has its own spot for the golden edit */
+  $("testGoldEmpty").hidden = !!v.gold;
 }
 function placeVids(){ if (isView(curTab)) sbsRender(); else sendHome(V()); }
 function sbsPlayers(){

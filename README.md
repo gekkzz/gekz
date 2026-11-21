@@ -3,15 +3,14 @@
 ## Files
 - `index.html` - the app (task sheet version)
 - `sw.js` - streams MEGA videos into the app's player (only fetches what you watch)
-- `middleware.js` + `package.json` - password gate for the whole site
 - `api/check.js` - Test Against Rubric (Claude)
+- `api/synth.js` - Testing tab > Retest: writes a New Prompt and a Merged Prompt from the golden edit (Claude). The speech model runs in the reviewer's browser, so no extra key is needed.
 - `classic/index.html` - the previous app for the old single-task CSV format, at `/classic/`
 
 ## Vercel Environment Variables (Settings > Environment Variables, type Secret)
-- `APP_PASSWORD` - the site password. The site stays locked until this is set.
-- `ANTHROPIC_API_KEY`, `CHECK_PASSWORD` - only needed for Test Against Rubric.
+- `ANTHROPIC_API_KEY`, `CHECK_PASSWORD` - needed for Test Against Rubric and Retest.
 
 After adding or changing a variable, redeploy (Deployments > newest > Redeploy).
 Never put passwords or keys in these files: the GitHub repo is public.
 
-Signing in sets a cookie for 30 days. Visit `/__logout` (the Sign out link in the header) to sign out.
+The site has no password: anyone with the link can open it. Sheets and videos stay in each person's browser.
