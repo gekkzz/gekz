@@ -209,6 +209,9 @@ td.c-view{display:none}
 .csfoot{font-size:12px;color:var(--mut);margin-top:4px}
 .csre{margin-left:auto;padding:3px 10px !important;font-size:12px !important;min-height:0 !important;height:auto !important}
 .tab[hidden]{display:none !important}
+#p-clips .tsrow{flex-wrap:nowrap;align-items:flex-start}
+#p-clips .tsrow .btn{flex-shrink:0}
+.csreset{margin-left:auto;order:9}
 .csstillhd{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 6px;font-size:13px}
 .csmom img.csstill{width:120px}
 /* Testing tab: golden edit left; prompt, Retest, New Prompt and Merged Prompt stacked on the right */
@@ -605,6 +608,7 @@ td.id{width:64px}
       <div class="tsrow">
         <button class="btn o-cyan" id="csRun">Scan for Pre-Edits</button>
         <button class="btn" id="csStop" hidden>Stop</button>
+        <button class="btn csreset" id="csReset" type="button" title="Clear the results and the uploaded clips for the next task">Reset</button>
         <span class="tsstat" id="csStat" aria-live="polite">Checks each source clip for signs it was edited before upload: jump cuts, hard cuts, and file details.</span>
       </div>
       <form id="csPw" class="tcpw tspw" hidden><label for="csPwIn">Check password</label><input id="csPwIn" type="password" autocomplete="current-password"><button class="btn o-cyan" type="submit">Scan</button></form>
@@ -1149,7 +1153,7 @@ function readPos(){ if (rubricShown()) lastPos = getPos(); return lastPos; }
 function showTab(t){
   if (t === curTab) return;
   stopHold();
-  const pos = readPos();
+  const pos = readPos(), was = curTab;
   curTab = t;
   if (t === "test") tsSyncIn();
   clipsDock();
@@ -1168,6 +1172,7 @@ function showTab(t){
   }
   updBuffering();
   queueLiveBars();
+  if (t === "clips" || was === "clips") renderClips();   /* Clips Testing lists only uploaded clips; other tabs list them all */
 }
 document.querySelector(".tabs").addEventListener("click", e => { const b = e.target.closest(".tab"); if (b) showTab(b.dataset.tab); });
 
@@ -1435,12 +1440,15 @@ function clearVids(t){
 }
 function renderClips(){
   const v = V();
-  $("clipTabs").innerHTML = v.clips.map((c, i) =>
+  const onlyUp = curTab === "clips";                         /* Clips Testing shows only clips uploaded from this computer */
+  if (onlyUp && v.active && !v.active.url.startsWith("blob:")) v.active = v.clips.find(c => c.url.startsWith("blob:")) || v.active;
+  const shownClips = onlyUp ? v.clips.filter(c => c.url.startsWith("blob:")) : v.clips;
+  $("clipTabs").innerHTML = v.clips.map((c, i) => !shownClips.includes(c) ? "" :
     `<span class="sub${c === v.active ? " on" : ""}"><button class="subbtn" role="tab" aria-selected="${c === v.active}" data-i="${i}" title="${escA(c.name)}">${esc(stem(c.name))}</button></span>`).join("");
-  v.clips.forEach(c => { const on = c === v.active; c.host.hidden = !on; if (!on) c.player.pause(); });
-  $("clipTabs").hidden = !v.clips.length;
+  v.clips.forEach(c => { const on = c === v.active && shownClips.includes(c); c.host.hidden = !on; if (!on) c.player.pause(); });
+  $("clipTabs").hidden = !shownClips.length;
   $("srcEmpty").hidden = v.clips.length > 0;
-  $("clipsEmpty").hidden = v.clips.length > 0;
+  $("clipsEmpty").hidden = shownClips.length > 0;
   placeVids();
   updBuffering();
   liveUpdate();
@@ -2623,6 +2631,9 @@ const CS_STILL_MIN = 60, CS_LONG_CLIP = 40 * 60;          /* seconds: a still of
 const csStillMin = () => window.RR_CS_STILL || CS_STILL_MIN, csLongClip = () => window.RR_CS_LONG || CS_LONG_CLIP;
 const csDur = sec => sec < 60 ? sec.toFixed(1) + " s" : Math.floor(sec / 60) + ":" + String(Math.floor(sec % 60)).padStart(2, "0");
 let csBusy = false, csTask = null, csCtl = null, csRes = {}, csResKey = null;
+/* Clips Testing only works with clips uploaded from this computer, never ones loaded from MEGA or saved history */
+const csUp = c => c.url.startsWith("blob:");
+const csClips = (t) => ((t || cur || NOTASK).vids.clips || []).filter(csUp);
 const csKey = t => t && sheetHash ? "clipscan:" + sheetHash + "|" + t.id : null;
 function clipsDock(){                     /* the source clip player sits in Multi-Take or Clips Testing, whichever is open */
   const to = curTab === "clips" ? $("clipsVid") : $("multiVid");
@@ -2646,10 +2657,11 @@ const csFileId = c => c.name + "|" + (c.size || 0);
 const CS_LABEL = { raw: "Raw", likely_raw: "Likely raw", possibly_edited: "Possibly edited", pre_edited: "Pre-edited", unsure: "Unsure" };
 const CS_TAG = { cut: "Cut", probable_cut: "Probable cut", not_a_cut: "Not a cut" };
 function csRender(){
-  const v = V(), out = $("csOut");
-  $("csRun").textContent = v.clips.length && v.clips.every(c => csRes[c.name] && csRes[c.name].fid === csFileId(c) && csRes[c.name].report) ? "Rescan All" : "Scan for Pre-Edits";
-  if (!v.clips.length){ out.innerHTML = ""; return; }
-  out.innerHTML = v.clips.map((c, ci) => {
+  const list = csClips(), out = $("csOut");
+  $("csReset").disabled = csBusy || (!list.length && !Object.keys(csRes).length);
+  $("csRun").textContent = list.length && list.every(c => csRes[c.name] && csRes[c.name].fid === csFileId(c) && csRes[c.name].report) ? "Rescan All" : "Scan for Pre-Edits";
+  if (!list.length){ out.innerHTML = ""; return; }
+  out.innerHTML = list.map((c, ci) => {
     const r = csRes[c.name], live = c.__cs;
     const head = (badge, cls) => '<div class="cshead"><button class="csname" data-clip="' + ci + '" title="Show this clip">' + esc(stem(c.name)) + '</button>' + (badge ? '<span class="csbadge ' + cls + '">' + esc(badge) + '</span>' : "")
       + (r && !live ? '<button class="btn sm csre" data-re="' + ci + '" type="button">Rescan</button>' : "") + '</div>';
@@ -2685,9 +2697,9 @@ function csRender(){
   }).join("");
 }
 $("csOut").addEventListener("click", e => {
-  const re = e.target.closest("[data-re]"); if (re){ if (!csBusy) csStart([V().clips[+re.dataset.re]]); return; }
+  const re = e.target.closest("[data-re]"); if (re){ if (!csBusy) csStart([csClips()[+re.dataset.re]]); return; }
   const b = e.target.closest("[data-clip]"); if (!b) return;
-  const c = V().clips[+b.dataset.clip]; if (!c) return;
+  const c = csClips()[+b.dataset.clip]; if (!c) return;
   V().active = c; renderClips();
   if (b.dataset.a != null) c.player.seekTo(+b.dataset.a, true, +b.dataset.b);   /* plays the range, stopping at its end */
 });
@@ -2763,7 +2775,7 @@ function csStart(only){
   if (csBusy) return;
   if (location.protocol === "file:"){ csStat("The scan only works on your Vercel site, not when index.html is opened from your computer.", true); return; }
   if (!cur){ csStat("Upload the task sheet and pick a task first.", true); return; }
-  if (!V().clips.length){ csStat("Upload this task's source clips first.", true); return; }
+  if (!csClips().length){ csStat("Upload this task's source clips from your computer first.", true); return; }
   if (!tcPass){ $("csPw").hidden = false; csStat("Enter the check password (the same one Test Against Rubric uses)."); $("csPwIn").focus(); csPending = only || null; return; }
   csRun(only);
 }
@@ -2771,8 +2783,9 @@ let csPending = null;
 async function csRun(only){
   const task = cur, v = V(), mine = () => cur === task;
   const res = csRes;                                     /* this task's results (csLoad has filled them) */
-  const all = only || (v.clips.every(c => res[c.name] && res[c.name].fid === csFileId(c) && res[c.name].report) ? v.clips.slice()
-              : v.clips.filter(c => !(res[c.name] && res[c.name].fid === csFileId(c) && res[c.name].report)));
+  const mineClips = csClips(task);
+  const all = only || (mineClips.every(c => res[c.name] && res[c.name].fid === csFileId(c) && res[c.name].report) ? mineClips.slice()
+              : mineClips.filter(c => !(res[c.name] && res[c.name].fid === csFileId(c) && res[c.name].report)));
   csBusy = true; csTask = task; $("csRun").disabled = true; $("csStop").hidden = false; $("csPw").hidden = true;
   csCtl = new AbortController(); const sig = csCtl.signal, calls = [];
   const paint = () => { if (mine()) csRender(); };
@@ -2827,6 +2840,17 @@ async function csRun(only){
   }
 }
 $("csRun").addEventListener("click", () => csStart());
+/* Reset: clears this task's scan results and removes the clips uploaded for it, ready for the next one */
+$("csReset").addEventListener("click", () => {
+  if (csCtl) csCtl.abort();
+  const t = cur || NOTASK, v = t.vids;
+  v.clips.filter(csUp).forEach(c => { c.player.destroy(); c.host.remove(); URL.revokeObjectURL(c.url); });
+  v.clips = v.clips.filter(c => !csUp(c));
+  if (!v.clips.includes(v.active)) v.active = v.clips[0] || null;
+  csRes = {}; const k = csKey(cur); if (k) kvDel(k);
+  $("csPw").hidden = true; csStat(CS_IDLE);
+  renderClips();
+});
 $("csStop").addEventListener("click", () => { if (csCtl) csCtl.abort(); });
 $("csPw").addEventListener("submit", e => { e.preventDefault(); const v = $("csPwIn").value; if (!v) return; tcPass = v; $("csPwIn").value = ""; const o = csPending; csPending = null; csRun(o); });
 
