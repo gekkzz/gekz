@@ -84,7 +84,8 @@ export default async function handler(req, res) {
     `metadata tags:\n${tags}`,
     `keyframes: ${parseInt(info.keyframes) || 0}; irregular keyframe positions (s): ${(info.irregularKeys || []).slice(0, 40).map(t => num(t, 2)).join(", ") || "none"}`,
     `audio: ${audio.note ? clip(audio.note, 120) : `median ${num(audio.medianDb)} dBFS, loudest 1% ${num(audio.loudestDb)} dBFS, share below -50 dBFS ${num((audio.silentShare || 0) * 100, 0)}%`}`,
-    body.decoded ? `frames scanned: all; typical change between frames ${num(body.motionMedian)}` : `frames NOT scanned (${clip(body.reason, 120)}); judge from the file details and keyframes`
+    body.quick ? `frames scanned: keyframes only (quick scan of a long clip), so cuts were NOT checked frame by frame; judge from the file details, keyframe rhythm and still stretches, and say in the summary that a full scan would be needed to rule out cuts if the file details look re-exported`
+      : body.decoded ? `frames scanned: all; typical change between frames ${num(body.motionMedian)}` : `frames NOT scanned (${clip(body.reason, 120)}); judge from the file details and keyframes`
   ].join("\n");
   const stills = (Array.isArray(body.stills) ? body.stills : []).slice(0, 20);
   const stillTxt = stills.length ? stills.map(m => `${num(m.start)} s to ${num(m.end)} s (${num(m.end - m.start)} s frozen)`).join("\n") + (body.longClip ? "\n(this is a long-form clip, so these are flagged)" : "") : "(none)";
