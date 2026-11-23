@@ -33,13 +33,13 @@ How to judge each moment:
 File signs:
 - Camera originals (for example iPhone) usually carry make and model tags, handler names like "Core Media Video", and slightly variable frame timing.
 - Re-exports usually lack camera tags and carry an encoder or editor tag (Lavf or Lavc means ffmpeg; also DaVinci Resolve, Premiere, Final Cut, CapCut, InShot), have perfectly constant timing, and often a reduced resolution.
-- A phone recording is never digitally silent; audio that is almost entirely below -55 dBFS suggests the sound was removed or replaced.
-- A re-encode alone can be a harmless format conversion, so it is not proof of editing by itself; cuts are the proof.
+- Audio: only COMPLETELY silent audio (no sound at all for the whole clip, marked "completely silent: yes") is a warning sign, since a microphone always picks something up. Quiet or near-silent audio with any sound in it is normal and points toward raw footage; never treat quiet audio as a sign of editing.
+- A re-encode, a format conversion or a crop on its own is common and harmless (people convert files to upload them), so it is not a sign of editing by itself; cuts are the proof.
 
 Overall verdict for the clip:
 - "pre_edited": at least one clear cut.
-- "possibly_edited": probable cuts only, or strong file signs (re-exported plus removed audio) without a confirmed cut.
-- "likely_raw": looks like a camera original with no cuts found, but something limits certainty (frames not scanned, or minor doubts).
+- "possibly_edited": probable cuts only, or a re-export whose audio is completely silent, without a confirmed cut.
+- "likely_raw": no cuts found and nothing else stands out, but the file is not a camera original (for example re-encoded or converted) or the frames were not all scanned. Quiet audio with any sound in it does not lower this.
 - "raw": camera-original file details and no cuts in a full frame scan.
 - "unsure": not enough to judge.
 
@@ -83,7 +83,7 @@ export default async function handler(req, res) {
     `track handler names: ${(info.handlers || []).slice(0, 8).map(h => clip(h, 60)).join(", ") || "(none)"}`,
     `metadata tags:\n${tags}`,
     `keyframes: ${parseInt(info.keyframes) || 0}; irregular keyframe positions (s): ${(info.irregularKeys || []).slice(0, 40).map(t => num(t, 2)).join(", ") || "none"}`,
-    `audio: ${audio.note ? clip(audio.note, 120) : `median ${num(audio.medianDb)} dBFS, loudest 1% ${num(audio.loudestDb)} dBFS, share below -50 dBFS ${num((audio.silentShare || 0) * 100, 0)}%`}`,
+    `audio: ${audio.note ? clip(audio.note, 120) : `completely silent: ${audio.silent ? "yes (no sound at all)" : "no (there is sound)"}; median ${num(audio.medianDb)} dBFS, loudest moment ${num(audio.peakDb)} dBFS`}`,
     body.quick ? `frames scanned: keyframes only (quick scan of a long clip), so cuts were NOT checked frame by frame; judge from the file details, keyframe rhythm and still stretches, and say in the summary that a full scan would be needed to rule out cuts if the file details look re-exported`
       : body.decoded ? `frames scanned: all; typical change between frames ${num(body.motionMedian)}` : `frames NOT scanned (${clip(body.reason, 120)}); judge from the file details and keyframes`
   ].join("\n");
