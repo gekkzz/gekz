@@ -2738,47 +2738,99 @@ function csWorker(blob, sig, onMsg, extra){
     w.postMessage({ blob, thumbW: 140, stillMin: csStillMin(), quickOver: csQuickOver(), ...extra });
   });
 }
-/* Full scans of longer clips are split into segments at keyframes and scanned side by side, one worker per spare
-   CPU core (up to 6). Each segment also decodes one keyframe group before and after its share, so moments at the
-   joins are judged with frames on both sides; still stretches that cross a join are stitched back together. */
-const CS_SPLIT_OVER = 3 * 60;                     /* seconds: shorter clips are scanned in one piece */
+/* Full scans of longer clips are cut into a queue of segments at keyframes; workers take the next segment when they
+   finish one. Auto-tune: the first scan starts with four workers and every 2 s adds more (two at a time while the gain
+   is big) as long as frames per second keeps improving by 8% or more; when extra workers stop helping, it settles on the
+   best count. That count is remembered (also across reloads), so later clips start at full speed. The ceiling is the
+   computer's thread count minus one. Each segment starts one keyframe group early and runs a few frames past its share,
+   so moments at the joins are judged with frames on both sides; still stretches that cross a join are stitched together. */
+const CS_SPLIT_OVER = 90;                         /* seconds: shorter clips are scanned in one piece */
+const CS_TUNE_KEY = "rr-cs-workers";
+let csTune = (() => { try { return JSON.parse(localStorage.getItem(CS_TUNE_KEY) || "null"); } catch (_) { return null; } })();
+function csTuneSave(w, settled){ csTune = { w, settled }; try { localStorage.setItem(CS_TUNE_KEY, JSON.stringify(csTune)); } catch (_) {} }
+const csSpeed = (pct, fps, w) => "Reading frames… " + pct + "%" + (fps ? " · " + Math.round(fps).toLocaleString() + " frames/s" : "") + " · " + w + (w === 1 ? " worker" : " workers") + " active";
 async function csWorkerRun(blob, sig, prog, full){
-  const one = () => csWorker(blob, sig, m => { if (m.info) prog("Reading frames…"); else prog("Reading frames… " + Math.round(m.progress * 100) + "%"); }, { full: !!full });
-  const P = window.RR_CS_PAR || Math.max(1, Math.min(6, (navigator.hardwareConcurrency || 4) - 1));
+  const maxW = window.RR_CS_PAR || Math.max(1, (navigator.hardwareConcurrency || 4) - 1);
   const pre = await csWorker(blob, sig, () => {}, { infoOnly: true });
   if (!pre.decoded) return pre;                                 /* can't decode here: the file-details result stands */
-  const dur = pre.info.duration, quick = !full && dur >= csQuickOver(), K = pre.keySamples.length;
-  if (quick || P < 2 || dur < (window.RR_CS_SPLIT || CS_SPLIT_OVER) || K < P * 3) return one();
-  const bounds = Array.from({ length: P + 1 }, (_, s) => Math.round(s * K / P));
-  const done = new Array(P).fill(0), n = pre.n;
-  const tick = () => prog("Reading frames… " + Math.round(done.reduce((a, b) => a + b, 0) / n * 100) + "% (" + P + " at once)");
-  let parts;
-  try {
-    parts = await Promise.all(bounds.slice(0, P).map((b0, s) => {
-      const b1 = bounds[s + 1];
-      const seg = { from: pre.keySamples[Math.max(0, b0 - 1)], to: b1 + 1 < K ? pre.keySamples[b1 + 1] : n,
-                    judgeFrom: s === 0 ? -1 : pre.keyT[b0], judgeTo: s === P - 1 ? Infinity : pre.keyT[b1] };
-      return csWorker(blob, sig, m => { if (m.outN != null){ done[s] = m.outN; tick(); } }, { full: true, seg });
-    }));
-  } catch (e) {
-    if (e.name === "AbortError") throw e;
-    prog("Reading frames… (one at a time)"); return one();      /* e.g. the graphics chip refused several decoders at once */
+  const dur = pre.info.duration, quick = !full && dur >= csQuickOver(), K = pre.keySamples.length, n = pre.n;
+  if (quick || maxW < 2 || dur < (window.RR_CS_SPLIT || CS_SPLIT_OVER) || K < 6){
+    let t0 = 0, f0 = 0, fps = 0; const tStart = performance.now();   /* one worker, with its speed shown */
+    const r = await csWorker(blob, sig, m => {
+      if (m.info){ prog(csSpeed(0, 0, 1)); return; }
+      const now = performance.now(); if (!t0){ t0 = now; f0 = m.outN || 0; } else if (now - t0 > 800) fps = ((m.outN || 0) - f0) / ((now - t0) / 1000);
+      prog(csSpeed(Math.round(m.progress * 100), fps, 1));
+    }, { full: !!full });
+    if (r.decoded) r.speed = { fps: (r.outN || n) / ((performance.now() - tStart) / 1000), workers: 1 };   /* average over the whole scan */
+    return r;
   }
-  /* merge: moments (dropping near-duplicates at the joins), then still stretches */
-  let cands = parts.flatMap(r => r.cands || []).sort((a, b) => a.t - b.t), merged = [];
-  cands.forEach(c => { const l = merged[merged.length - 1]; if (l && c.t - l.t < 0.2){ if (c.score > l.score) merged[merged.length - 1] = c; } else merged.push(c); });
-  const total = merged.length;
-  merged = merged.filter(c => /keyframe/.test(c.kind)).concat(merged.filter(c => !/keyframe/.test(c.kind)).sort((a, b) => b.score - a.score)).slice(0, 30).sort((a, b) => a.t - b.t);
-  const runs = [];
-  parts.flatMap(r => r.stills || []).sort((a, b) => a.start - b.start).forEach(m => {
-    const l = runs[runs.length - 1];
-    if (l && m.start <= l.end + 1.5) l.end = Math.max(l.end, m.end); else runs.push({ ...m });
+  /* the queue: segments of about dur / (2 x max workers), between 1 and 5 minutes, cut at keyframes */
+  const startW = Math.max(1, Math.min(maxW, csTune && csTune.w ? csTune.w : 4));
+  const segLen = window.RR_CS_SEG || Math.min(300, Math.max(45, dur / (Math.max(startW, Math.min(maxW, 8)) * 2)));
+  const cuts = [0]; for (let k = 1; k < K; k++) if (pre.keyT[k] - pre.keyT[cuts[cuts.length - 1]] >= segLen && K - k >= 2) cuts.push(k);
+  cuts.push(K);
+  const segs = cuts.slice(0, -1).map((b0, s) => { const b1 = cuts[s + 1], last = s === cuts.length - 2;
+    return { from: pre.keySamples[Math.max(0, b0 - 1)], to: last ? n : Math.min(n, pre.keySamples[b1] + 24),
+             judgeFrom: s === 0 ? -1 : pre.keyT[b0], judgeTo: last ? Infinity : pre.keyT[b1], tries: 0 }; });
+  const workTotal = segs.reduce((a, g) => a + (g.to - g.from), 0);
+  const queue = segs.slice(), parts = [], live = new Map();   /* live: segment -> frames done so far */
+  let finished = 0, cap = startW, settled = !!(csTune && csTune.settled && csTune.w), best = { w: settled ? startW : 0, fps: 0 }, peak = 0;
+  let lastT = performance.now(), lastF = 0, fps = 0, warm = true; const tStart = lastT;
+  const doneFrames = () => finished + [...live.values()].reduce((a, b) => a + b, 0);
+  const show = () => prog(csSpeed(Math.min(99, Math.round(doneFrames() / workTotal * 100)), fps, live.size));
+  return new Promise((ok, no) => {
+    let over = false;
+    const end = (err, val) => { if (over) return; over = true; clearInterval(tuner); err ? no(err) : ok(val); };
+    const launch = () => {
+      while (!over && live.size < cap && queue.length){
+        const g = queue.shift(); live.set(g, 0); peak = Math.max(peak, live.size);
+        csWorker(blob, sig, m => { if (m.outN != null){ live.set(g, m.outN); } }, { full: true, seg: g })
+          .then(r => { live.delete(g); finished += g.to - g.from; parts.push(r); next(); })
+          .catch(e => {
+            live.delete(g);
+            if (e.name === "AbortError") return end(e);
+            if (g.tries++ < 1){ queue.unshift(g); cap = Math.max(1, Math.min(cap, live.size)); settled = true; next(); }   /* e.g. too many decoders at once: back off and retry */
+            else end(new Error(e.message || String(e)));
+          });
+      }
+      show();
+    };
+    const next = () => { if (over) return; if (!queue.length && !live.size) return finish(); launch(); };
+    /* every 2 s: measure frames per second; add workers while they keep helping */
+    const tuner = setInterval(() => {
+      const now = performance.now(), f = doneFrames();
+      fps = (f - lastF) / ((now - lastT) / 1000); lastT = now; lastF = f;
+      if (warm){ warm = false; show(); return; }               /* the first window after a change is a warm-up */
+      if (!settled){
+        if (live.size >= cap){
+          if (!best.w || fps > best.fps * 1.08){
+            const gain = best.w ? fps / best.fps : 2;
+            best = { w: cap, fps };
+            if (cap < maxW && queue.length){ cap = Math.min(maxW, cap + (gain > 1.25 ? 2 : 1)); warm = true; launch(); }
+            else if (cap >= maxW){ settled = true; csTuneSave(cap, true); }
+          }
+          else { cap = best.w; settled = true; csTuneSave(best.w, true); }   /* the extra workers didn't help: settle on the best count */
+        }
+      } else if (!best.fps) best.fps = fps;
+      show();
+    }, 2000);
+    const finish = () => {
+      if (!settled && best.w) csTuneSave(best.w, false);       /* ran out of clip before settling: keep the count reached, tune further next time */
+      let cands = parts.flatMap(r => r.cands || []).sort((a, b) => a.t - b.t), merged = [];
+      cands.forEach(c => { const l = merged[merged.length - 1]; if (l && c.t - l.t < 0.2){ if (c.score > l.score) merged[merged.length - 1] = c; } else merged.push(c); });
+      const total = merged.length;
+      merged = merged.filter(c => /keyframe/.test(c.kind)).concat(merged.filter(c => !/keyframe/.test(c.kind)).sort((a, b) => b.score - a.score)).slice(0, 30).sort((a, b) => a.t - b.t);
+      const runs = [];
+      parts.flatMap(r => r.stills || []).sort((a, b) => a.start - b.start).forEach(m => { const l = runs[runs.length - 1]; if (l && m.start <= l.end + 1.5) l.end = Math.max(l.end, m.end); else runs.push({ ...m }); });
+      const longest = Math.max(0, ...parts.map(r => r.longestStill || 0), ...runs.map(m => m.end - m.start));
+      const meds = parts.map(r => r.motionMedian).sort((a, b) => a - b);
+      end(null, { info: pre.info, done: true, decoded: true, quick: false, cands: merged, total,
+        stills: runs.filter(m => m.end - m.start >= csStillMin()).slice(0, 20), longestStill: longest,
+        motionMedian: meds[meds.length >> 1], thumb: parts[0].thumb, framesDecoded: n,
+        speed: { fps: workTotal / ((performance.now() - tStart) / 1000), workers: best.w || peak, segments: segs.length } });   /* average over the whole scan */
+    };
+    launch();
   });
-  const longest = Math.max(0, ...parts.map(r => r.longestStill || 0), ...runs.map(m => m.end - m.start));
-  const meds = parts.map(r => r.motionMedian).sort((a, b) => a - b);
-  return { info: pre.info, done: true, decoded: true, quick: false, parallel: P, cands: merged, total,
-           stills: runs.filter(m => m.end - m.start >= csStillMin()).slice(0, 20), longestStill: longest,
-           motionMedian: meds[meds.length >> 1], thumb: parts[0].thumb, framesDecoded: n };
 }
 async function csAudio(blob, info, cands, quick){
   if (!info.audio) return { note: "no audio track" };
@@ -2825,6 +2877,7 @@ function csFacts(info, audio, scan){
   if (sw) f.push("Software: " + tg[sw]);
   if (enc) f.push("Encoder: " + tg[enc]);
   f.push("Keyframes: " + info.keyframes + (info.irregularKeys.length ? ", " + info.irregularKeys.length + " at irregular positions" : ", steady rhythm"));
+  if (scan && scan.speed) f.push("Scan: every frame, " + scan.speed.workers + (scan.speed.workers === 1 ? " worker" : " workers") + " at about " + Math.round(scan.speed.fps).toLocaleString() + " frames/s");
   if (scan && scan.decoded) f.push("Longest still stretch: " + (scan.longestStill >= 1 ? csDur(scan.longestStill) : "none"));
   f.push("Audio: " + (audio.note || (audio.silent ? "completely silent (no sound at all)" : (audio.silentShare > 0.9 ? "very quiet, but has sound" : "present") + ", median " + Math.round(audio.medianDb) + " dB")));
   return f;
