@@ -196,10 +196,9 @@ td.c-view{display:none}
 .csmeta summary{cursor:pointer}
 .csmeta ul{margin:4px 0 0;padding-left:18px}
 .csmoms{display:flex;flex-direction:column;gap:10px;margin-top:6px}
-.csmom{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;align-items:start;padding-top:10px;border-top:1px solid var(--line)}
+.csmom{display:grid;grid-template-columns:auto 1fr;gap:6px 12px;align-items:center;padding-top:10px;border-top:1px solid var(--line)}
 .csmom img{grid-column:1/-1;max-width:100%;width:440px;border-radius:6px;display:block}
-.cslink{all:unset;cursor:pointer;color:var(--liveblue);font-variant-numeric:tabular-nums;white-space:nowrap}
-.cslink:hover{text-decoration:underline}
+.csmom .cslink{justify-self:start}   /* time ranges use the rubric's .chip look */
 .cstag{font-size:12px;font-weight:600;margin-right:6px}
 .cstag.cut{color:#e5534b}.cstag.probable_cut{color:#d4a72c}.cstag.not_a_cut{color:var(--mut)}
 .csdis{margin-top:10px;font-size:13px;color:var(--mut)}
@@ -2678,13 +2677,13 @@ function csRender(){
     const shown = moms.filter(m => m.j.verdict !== "not_a_cut"), hid = moms.filter(m => m.j.verdict === "not_a_cut");
     const row = m => {
       const a = Math.max(0, m.t - 2), b = Math.min(r.info.duration || m.t + 2, m.t + 2);
-      return '<div class="csmom"><button class="cslink" data-clip="' + ci + '" data-a="' + a.toFixed(2) + '" data-b="' + b.toFixed(2) + '" title="Play this moment in the clip">' + fmt(a) + ' - ' + fmt(b) + '</button>'
+      return '<div class="csmom"><button class="chip cslink" data-clip="' + ci + '" data-a="' + a.toFixed(2) + '" data-b="' + b.toFixed(2) + '" title="Play this moment in the clip">' + fmt(a) + ' - ' + fmt(b) + '</button>'
         + '<div><span class="cstag ' + m.j.verdict + '">' + esc(CS_TAG[m.j.verdict] || "") + '</span>' + esc(m.j.reason || m.kind) + '</div>'
         + (m.img ? '<img src="' + m.img + '" alt="Frames just before and after ' + fmt(m.t) + ' (the red bar marks the moment)" loading="lazy">' : "") + '</div>';
     };
     const facts = r.facts || [];
     const still = (r.stills || []).length && r.longClip;
-    const stillRow = m => '<div class="csmom"><button class="cslink" data-clip="' + ci + '" data-a="' + m.start.toFixed(2) + '" data-b="' + m.end.toFixed(2) + '" title="Play this stretch in the clip">' + fmt(m.start) + ' - ' + fmt(m.end) + '</button>'
+    const stillRow = m => '<div class="csmom"><button class="chip cslink" data-clip="' + ci + '" data-a="' + m.start.toFixed(2) + '" data-b="' + m.end.toFixed(2) + '" title="Play this stretch in the clip">' + fmt(m.start) + ' - ' + fmt(m.end) + '</button>'
       + '<div><span class="cstag cut">Still image</span>The picture doesn\'t change for ' + csDur(m.end - m.start) + '.</div>' + (m.img ? '<img class="csstill" src="' + m.img + '" alt="The still picture" loading="lazy">' : "") + '</div>';
     return '<div class="cscard">' + head(CS_LABEL[x.verdict] || "Unsure", x.verdict || "unsure")
       + (changed ? '<div class="csnote err">This clip was replaced since it was scanned. Rescan it.</div>' : "")
