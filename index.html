@@ -31,7 +31,12 @@ h1{margin:0;font-size:18px;font-weight:600}
 .btn.o-green:hover,.btn.o-blue:hover,.btn.o-yellow:hover{filter:brightness(1.15)}
 .btn:focus-visible,.ev button:focus-visible{outline:2px solid var(--fg);outline-offset:2px}
 .btn[disabled]{opacity:.4;cursor:not-allowed}
-.msg{margin:12px 24px;padding:10px 14px;border:1px solid var(--line);border-radius:8px;background:var(--panel);font-size:14px}
+.msg{margin:12px 24px;padding:10px 14px;border:1px solid var(--line);border-radius:8px;background:var(--panel);font-size:14px;display:flex;align-items:flex-start;gap:12px}
+.msg[hidden]{display:none}
+#msgTxt{flex:1;min-width:0}
+.msgx{all:unset;cursor:pointer;flex-shrink:0;width:24px;height:24px;margin:-2px -4px -2px 0;border-radius:6px;text-align:center;line-height:22px;font-size:20px;color:var(--mut)}
+.msgx:hover{color:var(--fg);background:var(--line)}
+.msgx:focus-visible{outline:2px solid var(--liveblue)}
 .wrap{overflow-x:auto}
 table{border-collapse:collapse;width:100%;min-width:1000px}
 th{position:sticky;top:0;background:var(--bg);text-align:left;font-weight:400;color:var(--mut);font-size:13px;padding:14px 12px;border-bottom:1px solid var(--line);vertical-align:top}
@@ -530,7 +535,7 @@ td.id{width:64px}
   <p id="restoreTxt"></p>
   <div class="dlgact"><button class="btn" id="restoreNo" type="button">Discard</button><button class="btn o-blue" id="restoreYes" type="button">Restore</button></div>
 </dialog>
-<div id="msg" class="msg" hidden></div>
+<div id="msg" class="msg" hidden role="status"><span id="msgTxt"></span><button class="msgx" id="msgX" type="button" aria-label="Dismiss this message" title="Dismiss">&times;</button></div>
 <section id="p-rubric">
 <div id="rubricBox">
 <div class="rhead"><span class="rtitle" hidden>Rubric <span class="scsub" id="rheadTask"></span></span><span class="rfilter" role="group" aria-label="Show rows"></span><span class="rscore">Score <b class="scoreV">&mdash;</b> <span class="scsub subV"></span></span></div>
@@ -928,7 +933,10 @@ $("taskSearch").addEventListener("keydown", e => {
   if (e.key === "Escape"){ $("taskSearch").value = ""; fillTaskSel(); }
 });
 
-function note(t){ const m = $("msg"); m.textContent = t; m.hidden = !t; }
+/* the message bar: warnings and notices; × dismisses one, and that same message stays closed for the rest of the session */
+const noteGone = new Set();
+function note(t){ if (t && noteGone.has(t)) t = ""; $("msgTxt").textContent = t; $("msg").hidden = !t; }
+$("msgX").addEventListener("click", () => { const t = $("msgTxt").textContent; if (t) noteGone.add(t); note(""); });
 
 /* ---------- rubric table ---------- */
 const MEAS = (() => { try { return document.createElement("canvas").getContext("2d"); } catch (e) { return null; } })();
@@ -1700,7 +1708,7 @@ function parseTs(txt){
 }
 const normName = s => s.toLowerCase().replace(/[^a-z0-9]/g, "").replace(/(\D)0+(\d)/g, "$1$2");   /* "Clip_01" == "Clip 1" */
 const findClip = name => V().clips.find(c => normName(stem(c.name)) === normName(name));
-function flash(t){ note(t); setTimeout(() => { if ($("msg").textContent === t) note(""); }, 6000); }
+function flash(t){ note(t); setTimeout(() => { if ($("msgTxt").textContent === t) note(""); }, 6000); }
 function viewSpec(spec, avoid = -1){
   const p = parseTs(spec); if (!p) return;
   const c = findClip(p.name);
